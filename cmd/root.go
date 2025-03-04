@@ -39,13 +39,9 @@ func init() {
 
 func initConfig() {
 	flags := make(map[string]any)
-	rootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
-		if f.Changed {
-			flags[f.Name] = f.Value.String()
-		}
+	rootCmd.PersistentFlags().Visit(func(f *pflag.Flag) {
+		flags[f.Name] = f.Value.String()
 	})
-
-	log.Printf("[DEBUG] rootCmd collected flags: %+v", flags)
 
 	if err := config.Init(cfgFile, flags); err != nil {
 		log.Fatal(err)
