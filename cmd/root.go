@@ -5,11 +5,15 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/EarthmanMuons/herosync/config"
 )
 
-var cfgFile string
+var (
+	cfgFile  string
+	cameraIP string
+)
 
 // The bare root command runs status by default.
 var rootCmd = &cobra.Command{
@@ -36,7 +40,16 @@ func init() {
 }
 
 func initConfig() {
-	if err := config.Init(cfgFile); err != nil {
+	flags := make(map[string]any)
+	rootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+		if f.Changed {
+			flags[f.Name] = f.Value.String()
+		}
+	})
+
+	log.Printf("[DEBUG] rootCmd collected flags: %+v", flags)
+
+	if err := config.Init(cfgFile, flags); err != nil {
 		log.Fatal(err)
 	}
 }

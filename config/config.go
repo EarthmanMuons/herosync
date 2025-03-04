@@ -21,31 +21,27 @@ type Config struct {
 	} `koanf:"camera"`
 }
 
-func Init(cfgFile string) error {
-	// Priority order:
-	// 1. Command line flags (highest priority)
-	// 2. Environment variables
-	// 3. Configuration file
-	// 4. Default values (lowest priority)
-
-	// Load default values
+func Init(cfgFile string, flags map[string]any) error {
+	// 1. Load default values (lowest priority)
 	if err := loadDefaults(); err != nil {
 		return err
 	}
 
-	// Load configuration file
+	// 2. Load configuration file
 	if cfgFile != "" {
 		if err := loadFile(cfgFile); err != nil {
 			return err
 		}
 	}
 
-	// Load environment variables
+	// 3. Load environment variables
 	if err := loadEnv(); err != nil {
 		return err
 	}
 
-	return nil
+	// 4. Apply command line flag overrides (highest priority)
+	_, err := ApplyFlags(flags)
+	return err
 }
 
 func loadDefaults() error {
@@ -66,6 +62,13 @@ func loadEnv() error {
 		return strings.Replace(strings.ToLower(
 			strings.TrimPrefix(s, "HEROSYNC_")), "_", ".", -1)
 	}), nil)
+}
+
+func ApplyFlags(flags map[string]any) (*Config, error) {
+	if err := k.Load(confmap.Provider(flags, "-"), nil); err != nil {
+		return nil, err
+	}
+	return GetConfig()
 }
 
 // GetConfig returns the parsed configuration
