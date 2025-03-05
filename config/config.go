@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/knadh/koanf/parsers/toml/v2"
@@ -15,10 +16,10 @@ import (
 var k = koanf.New(".")
 
 type Config struct {
-	Camera struct {
-		Protocol string `koanf:"protocol"`
-		IP       string `koanf:"ip"`
-	} `koanf:"camera"`
+	GoPro struct {
+		Host   string `koanf:"host"`
+		Scheme string `koanf:"scheme"`
+	} `koanf:"gopro"`
 }
 
 func Init(cfgFile string, flags map[string]any) error {
@@ -46,8 +47,8 @@ func Init(cfgFile string, flags map[string]any) error {
 
 func loadDefaults() error {
 	defaults := map[string]any{
-		"camera.ip":       "auto",
-		"camera.protocol": "http",
+		"gopro.host":   "", // empty means use mDNS discovery
+		"gopro.scheme": "http",
 	}
 
 	return k.Load(confmap.Provider(defaults, "."), nil)
@@ -84,8 +85,12 @@ func GetConfig() (*Config, error) {
 }
 
 func validateConfig(cfg *Config) error {
-	if cfg.Camera.Protocol != "http" && cfg.Camera.Protocol != "https" {
-		return fmt.Errorf("invalid protocol: %s", cfg.Camera.Protocol)
+	if cfg.GoPro.Scheme != "http" && cfg.GoPro.Scheme != "https" {
+		return fmt.Errorf("invalid scheme: %s; choose http or https", cfg.GoPro.Scheme)
 	}
 	return nil
+}
+
+func (c *Config) GetGoPro() (*url.URL, error) {
+    return resolveGoPro(c.GoPro.Host, c.GoPro.Scheme)
 }

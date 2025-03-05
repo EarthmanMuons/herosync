@@ -13,7 +13,8 @@ var statusCmd = &cobra.Command{
 }
 
 func init() {
-	statusCmd.Flags().String("camera-ip", "", "override camera IP address")
+	statusCmd.Flags().String("gopro-host", "", "GoPro host (hostname:port or IP)")
+	statusCmd.Flags().String("gopro-scheme", "", "GoPro scheme (http/https)")
 	rootCmd.AddCommand(statusCmd)
 }
 
@@ -23,6 +24,11 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("GoPro base URL: %s://%s\n", cfg.Camera.Protocol, cfg.Camera.IP)
+	url, err := cfg.GetGoPro()
+	if err != nil {
+		return fmt.Errorf("failed to resolve GoPro connection: %v", err)
+	}
+
+	fmt.Printf("GoPro base URL: %s\n", url)
 	return nil
 }
