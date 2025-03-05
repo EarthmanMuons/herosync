@@ -9,8 +9,10 @@ import (
 	"github.com/miekg/dns"
 )
 
+// resolveGoPro returns a URL for connecting to the GoPro camera using the specified
+// host and scheme. If host is empty, mDNS discovery is used.
 func resolveGoPro(host, scheme string) (*url.URL, error) {
-	// Default to http if not specified
+	// Use http by default
 	if scheme == "" {
 		scheme = "http"
 	}
@@ -18,7 +20,6 @@ func resolveGoPro(host, scheme string) (*url.URL, error) {
 		return nil, fmt.Errorf("invalid scheme: %s; choose http or https", scheme)
 	}
 
-	// Get the host IP address (either via discovery or resolution)
 	resolvedHost, err := resolveHost(host)
 	if err != nil {
 		return nil, err
@@ -30,18 +31,19 @@ func resolveGoPro(host, scheme string) (*url.URL, error) {
 	}, nil
 }
 
+// resolveHost takes a host string (which may include a port) and returns a resolved
+// host:port string with an IPv4 address. If the host is empty, mDNS discovery is used.
 func resolveHost(host string) (string, error) {
-	// Parse the host (to handle any port info)
+	// Parse as URL to handle port correctly
 	u, err := url.Parse("//" + host)
 	if err != nil {
 		return "", fmt.Errorf("invalid host format: %v", err)
 	}
 
-	// Extract hostname and port
 	hostname := u.Hostname()
 	port := u.Port()
 
-	// If hostname is empty, use mDNS discovery
+	// Handle empty hostname (discovery), DNS lookup, or direct IP
 	if hostname == "" {
 		ip, err := findGoPro()
 		if err != nil {
@@ -49,34 +51,36 @@ func resolveHost(host string) (string, error) {
 		}
 		hostname = ip.String()
 	} else if net.ParseIP(hostname) == nil {
-		// If hostname isn't an IP address, resolve it
-		ips, err := net.LookupIP(hostname)
+		ip, err := resolveIPv4(hostname)
 		if err != nil {
-			return "", fmt.Errorf("failed to resolve hostname %s: %v", hostname, err)
-		}
-		// Use first IPv4 address
-		var ip net.IP
-		for _, addr := range ips {
-			if v4 := addr.To4(); v4 != nil {
-				ip = v4
-				break
-			}
-		}
-		if ip == nil {
-			return "", fmt.Errorf("no IPv4 address found for %s", hostname)
+			return "", err
 		}
 		hostname = ip.String()
 	}
 
-	// Reconstruct host with resolved IP and port if specified
 	if port != "" {
 		return net.JoinHostPort(hostname, port), nil
 	}
 	return hostname, nil
 }
 
+// resolveIPv4 looks up the first IPv4 address for a hostname.
+func resolveIPv4(hostname string) (net.IP, error) {
+	ips, err := net.LookupIP(hostname)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve hostname %s: %v", hostname, err)
+	}
+	for _, addr := range ips {
+		if v4 := addr.To4(); v4 != nil {
+			return v4, nil
+		}
+	}
+	return nil, fmt.Errorf("no IPv4 address found for %s", hostname)
+}
+
+// findGoPro discovers a GoPro camera on the local network using mDNS.
+// It searches for the _gopro-web._tcp.local. service and returns the camera's IP address.
 func findGoPro() (net.IP, error) {
-	// Create UDP connection for multicast
 	multicastConn, err := net.ListenMulticastUDP("udp4", nil,
 		&net.UDPAddr{
 			IP:   net.ParseIP("224.0.0.251"),
@@ -87,26 +91,24 @@ func findGoPro() (net.IP, error) {
 	}
 	defer multicastConn.Close()
 
-	// Create query message
+	// Build and send mDNS query
 	msg := new(dns.Msg)
 	msg.SetQuestion("_gopro-web._tcp.local.", dns.TypePTR)
 	msg.RecursionDesired = false
 
-	// Send query
 	buf, err := msg.Pack()
 	if err != nil {
 		return nil, fmt.Errorf("failed to pack message: %v", err)
 	}
 
-	_, err = multicastConn.WriteToUDP(buf, &net.UDPAddr{
+	if _, err := multicastConn.WriteToUDP(buf, &net.UDPAddr{
 		IP:   net.ParseIP("224.0.0.251"),
 		Port: 5353,
-	})
-	if err != nil {
+	}); err != nil {
 		return nil, fmt.Errorf("failed to send query: %v", err)
 	}
 
-	// Listen for response
+	// Wait for response
 	response := make([]byte, 65536)
 	multicastConn.SetReadDeadline(time.Now().Add(4 * time.Second))
 
@@ -119,13 +121,12 @@ func findGoPro() (net.IP, error) {
 			return nil, fmt.Errorf("error reading response: %v", err)
 		}
 
-		// Parse response
 		resp := new(dns.Msg)
 		if err := resp.Unpack(response[:n]); err != nil {
 			continue
 		}
 
-		// Look for A record in response
+		// Return first A record found
 		for _, answer := range append(resp.Answer, resp.Extra...) {
 			if a, ok := answer.(*dns.A); ok {
 				return a.A, nil
