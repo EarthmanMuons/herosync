@@ -7,9 +7,10 @@ import (
 )
 
 var statusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "Show sync status and statistics",
-	RunE:  runStatus,
+	Use:     "status",
+	Aliases: []string{"st"},
+	Short:   "Show sync status and statistics",
+	RunE:    runStatus,
 }
 
 func init() {
