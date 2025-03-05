@@ -42,7 +42,47 @@ func (c *Client) GetMediaList(ctx context.Context) (*MediaList, error) {
 		return nil, fmt.Errorf("decoding response: %w", err)
 	}
 
+	// Get camera's timezone offset and adjust the media timestamps.
+	tzOffset, err := c.getTimezoneOffset(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("getting timezone offset: %w", err)
+	}
+
+	if err := adjustTimestamps(&mediaList, tzOffset); err != nil {
+		return nil, fmt.Errorf("adjusting timestamps: %w", err)
+	}
+
 	return &mediaList, nil
+}
+
+func (c *Client) getTimezoneOffset(ctx context.Context) (int, error) {
+	resp, err := c.get(ctx, "/gopro/camera/get_date_time")
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	var dt cameraDateTime
+	if err := json.NewDecoder(resp.Body).Decode(&dt); err != nil {
+		return 0, fmt.Errorf("decoding response: %w", err)
+	}
+
+	return dt.TZOffset, nil
+}
+
+// adjustTimestamps converts camera-local timestamps to UTC while preserving timezone info.
+func adjustTimestamps(mediaList *MediaList, tzOffset int) error {
+	loc := time.FixedZone("Camera", tzOffset*60)
+
+	for _, dir := range mediaList.Media {
+		for i := range dir.Items {
+			localTime := time.Unix(int64(dir.Items[i].CreatedAt), 0)
+			utcTime := localTime.Add(time.Duration(-tzOffset) * time.Minute)
+			dir.Items[i].CreatedAt = Timestamp(utcTime.In(loc).Unix())
+		}
+	}
+
+	return nil
 }
 
 // Helper method for making GET requests.

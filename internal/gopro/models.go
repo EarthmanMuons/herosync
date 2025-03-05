@@ -31,6 +31,13 @@ type MediaListItem struct {
 	Size      String64  `json:"s"`   // Size of media in bytes
 }
 
+type cameraDateTime struct {
+	Date     string `json:"date"`  // Format: YYYY_MM_DD
+	Time     string `json:"time"`  // Format: HH_MM_SS
+	DST      int    `json:"dst"`   // 1 if DST is active, 0 if not
+	TZOffset int    `json:"tzone"` // Timezone offset in minutes
+}
+
 // Timestamp is a Unix timestamp that can be unmarshaled from either a string or number.
 type Timestamp int64
 
