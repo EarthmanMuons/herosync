@@ -20,12 +20,12 @@ func init() {
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
-	cfg, err := applyLocalFlags(cmd)
+	cfg, err := getConfigWithFlags(cmd)
 	if err != nil {
 		return err
 	}
 
-	url, err := cfg.GetGoPro()
+	url, err := cfg.GetGoProURL()
 	if err != nil {
 		return fmt.Errorf("failed to resolve GoPro connection: %v", err)
 	}

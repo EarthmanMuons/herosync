@@ -40,9 +40,12 @@ func Init(cfgFile string, flags map[string]any) error {
 		return err
 	}
 
-	// 4. Apply command line flag overrides (highest priority)
-	_, err := ApplyFlags(flags)
-	return err
+	// 4. Load command line flags (highest priority)
+	if err := LoadFlags(flags); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func loadDefaults() error {
@@ -65,15 +68,12 @@ func loadEnv() error {
 	}), nil)
 }
 
-func ApplyFlags(flags map[string]any) (*Config, error) {
-	if err := k.Load(confmap.Provider(flags, "-"), nil); err != nil {
-		return nil, err
-	}
-	return GetConfig()
+func LoadFlags(flags map[string]any) error {
+	return k.Load(confmap.Provider(flags, "-"), nil)
 }
 
-// GetConfig returns the parsed configuration
-func GetConfig() (*Config, error) {
+// Get the current configuration state.
+func Get() (*Config, error) {
 	var cfg Config
 	if err := k.Unmarshal("", &cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal config: %v", err)
@@ -91,6 +91,6 @@ func validateConfig(cfg *Config) error {
 	return nil
 }
 
-func (c *Config) GetGoPro() (*url.URL, error) {
-    return resolveGoPro(c.GoPro.Host, c.GoPro.Scheme)
+func (c *Config) GetGoProURL() (*url.URL, error) {
+	return resolveGoPro(c.GoPro.Host, c.GoPro.Scheme)
 }
