@@ -31,15 +31,6 @@ func resolveGoPro(host, scheme string) (*url.URL, error) {
 }
 
 func resolveHost(host string) (string, error) {
-	// Empty host means use mDNS discovery
-	if host == "" {
-		ip, err := findGoPro()
-		if err != nil {
-			return "", fmt.Errorf("auto-discovery failed: %v", err)
-		}
-		return ip.String(), nil
-	}
-
 	// Parse the host (to handle any port info)
 	u, err := url.Parse("//" + host)
 	if err != nil {
@@ -50,8 +41,15 @@ func resolveHost(host string) (string, error) {
 	hostname := u.Hostname()
 	port := u.Port()
 
-	// If hostname isn't an IP address, resolve it
-	if net.ParseIP(hostname) == nil {
+	// If hostname is empty, use mDNS discovery
+	if hostname == "" {
+		ip, err := findGoPro()
+		if err != nil {
+			return "", fmt.Errorf("auto-discovery failed: %v", err)
+		}
+		hostname = ip.String()
+	} else if net.ParseIP(hostname) == nil {
+		// If hostname isn't an IP address, resolve it
 		ips, err := net.LookupIP(hostname)
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve hostname %s: %v", hostname, err)
@@ -70,7 +68,7 @@ func resolveHost(host string) (string, error) {
 		hostname = ip.String()
 	}
 
-	// Reconstruct host with resolved IP and original port if any
+	// Reconstruct host with resolved IP and port if specified
 	if port != "" {
 		return net.JoinHostPort(hostname, port), nil
 	}
