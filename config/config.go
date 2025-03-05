@@ -3,8 +3,11 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/adrg/xdg"
 	"github.com/knadh/koanf/parsers/toml/v2"
 	"github.com/knadh/koanf/providers/confmap"
 	"github.com/knadh/koanf/providers/env"
@@ -22,17 +25,20 @@ type Config struct {
 	} `koanf:"gopro"`
 }
 
-func Init(cfgFile string, flags map[string]any) error {
+// DefaultConfigPath returns the default config file path following XDG specification.
+func DefaultConfigPath() string {
+	return filepath.Join(xdg.ConfigHome, "herosync", "config.toml")
+}
+
+func Init(configFile string, flags map[string]any) error {
 	// 1. Load default values (lowest priority)
 	if err := loadDefaults(); err != nil {
 		return err
 	}
 
 	// 2. Load configuration file
-	if cfgFile != "" {
-		if err := loadFile(cfgFile); err != nil {
-			return err
-		}
+	if err := loadFile(configFile); err != nil {
+		return err
 	}
 
 	// 3. Load environment variables
@@ -50,15 +56,19 @@ func Init(cfgFile string, flags map[string]any) error {
 
 func loadDefaults() error {
 	defaults := map[string]any{
-		"gopro.host":   "", // empty means use mDNS discovery
+		"gopro.host":   "", // Empty means use mDNS discovery
 		"gopro.scheme": "http",
 	}
 
 	return k.Load(confmap.Provider(defaults, "."), nil)
 }
 
-func loadFile(cfgFile string) error {
-	return k.Load(file.Provider(cfgFile), toml.Parser())
+func loadFile(configFile string) error {
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		// Config file doesn't exist, that's okay - just skip it
+		return nil
+	}
+	return k.Load(file.Provider(configFile), toml.Parser())
 }
 
 func loadEnv() error {

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -10,10 +11,7 @@ import (
 	"github.com/EarthmanMuons/herosync/config"
 )
 
-var (
-	cfgFile  string
-	cameraIP string
-)
+var configFile string
 
 var rootCmd = &cobra.Command{
 	Use:   "herosync",
@@ -34,7 +32,11 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	// Global flags
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file path")
+	rootCmd.PersistentFlags().StringVar(&configFile, "config-file", "",
+		fmt.Sprintf("configuration file path\n"+
+			"[env: HEROSYNC_CONFIG_FILE]\n"+
+			"[default: %s]\n",
+			shortenPath(config.DefaultConfigPath())))
 }
 
 func initConfig() {
@@ -43,7 +45,16 @@ func initConfig() {
 		flags[f.Name] = f.Value.String()
 	})
 
-	if err := config.Init(cfgFile, flags); err != nil {
+	// Only use environment variable or default path if --config-file flag wasn't explicitly set
+	if configFile == "" {
+		if envConfig := os.Getenv("HEROSYNC_CONFIG_FILE"); envConfig != "" {
+			configFile = envConfig
+		} else {
+			configFile = config.DefaultConfigPath()
+		}
+	}
+
+	if err := config.Init(configFile, flags); err != nil {
 		log.Fatal(err)
 	}
 }
