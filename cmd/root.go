@@ -12,14 +12,12 @@ import (
 	"github.com/EarthmanMuons/herosync/internal/logging"
 )
 
-var (
+type rootOptions struct {
 	configFile string
-	cmdOptions RootOptions
-)
-
-type RootOptions struct {
-	LogLevel string
+	logLevel   string
 }
+
+var opts rootOptions
 
 var rootCmd = &cobra.Command{
 	Use:   "herosync",
@@ -28,15 +26,15 @@ var rootCmd = &cobra.Command{
 combine chapters into complete videos, clean up storage, and optionally publish
 to YouTube.`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if cmdOptions.LogLevel == "" {
+		if opts.logLevel == "" {
 			cfg, err := config.Get()
 			if err != nil {
 				log.Fatalf("Failed to get config: %v", err)
 			}
-			cmdOptions.LogLevel = cfg.Log.Level
+			opts.logLevel = cfg.Log.Level
 		}
 
-		logging.Init(cmdOptions.LogLevel)
+		logging.Init(opts.logLevel)
 	},
 }
 
@@ -51,13 +49,13 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	// Global flags
-	rootCmd.PersistentFlags().StringVar(&configFile, "config-file", "",
+	rootCmd.PersistentFlags().StringVar(&opts.configFile, "config-file", "",
 		fmt.Sprintf("configuration file path\n"+
 			"[env: HEROSYNC_CONFIG_FILE]\n"+
 			"[default: %s]\n",
 			shortenPath(config.DefaultConfigPath())))
 
-	rootCmd.PersistentFlags().StringVar(&cmdOptions.LogLevel, "log-level", "",
+	rootCmd.PersistentFlags().StringVar(&opts.logLevel, "log-level", "",
 		"logging level (none, error, warn, info, debug)\n"+
 			"[env: HEROSYNC_LOG_LEVEL]\n"+
 			"[default: info]\n")
@@ -70,15 +68,15 @@ func initConfig() {
 	})
 
 	// Only use environment variable or default path if --config-file flag wasn't explicitly set
-	if configFile == "" {
+	if opts.configFile == "" {
 		if envConfig := os.Getenv("HEROSYNC_CONFIG_FILE"); envConfig != "" {
-			configFile = envConfig
+			opts.configFile = envConfig
 		} else {
-			configFile = config.DefaultConfigPath()
+			opts.configFile = config.DefaultConfigPath()
 		}
 	}
 
-	if err := config.Init(configFile, flags); err != nil {
+	if err := config.Init(opts.configFile, flags); err != nil {
 		log.Fatal(err)
 	}
 }
