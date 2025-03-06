@@ -30,6 +30,21 @@ func NewClient(baseURL *url.URL) *Client {
 
 // API methods
 
+func (c *Client) GetHardwareInfo(ctx context.Context) (*HardwareInfo, error) {
+	resp, err := c.get(ctx, "/gopro/camera/info")
+	if err != nil {
+		return nil, fmt.Errorf("getting hardware info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var hwInfo HardwareInfo
+	if err := json.NewDecoder(resp.Body).Decode(&hwInfo); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+
+	return &hwInfo, nil
+}
+
 func (c *Client) GetMediaList(ctx context.Context) (*MediaList, error) {
 	resp, err := c.get(ctx, "/gopro/media/list")
 	if err != nil {

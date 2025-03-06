@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+
+	"github.com/EarthmanMuons/herosync/internal/gopro"
 )
 
 var statusCmd = &cobra.Command{
@@ -25,11 +27,21 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	url, err := cfg.GetGoProURL()
+	baseURL, err := cfg.GetGoProURL()
 	if err != nil {
 		return fmt.Errorf("failed to resolve GoPro connection: %v", err)
 	}
 
-	fmt.Printf("GoPro base URL: %s\n", url)
+	client := gopro.NewClient(baseURL)
+
+	hwInfo, err := client.GetHardwareInfo(cmd.Context())
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Connected to GoPro %s at %s\n", hwInfo.ModelName, baseURL)
+	fmt.Printf("Serial Number: %s\n", hwInfo.SerialNumber)
+	fmt.Printf("Firmware Version: %s\n", hwInfo.FirmwareVersion)
+
 	return nil
 }

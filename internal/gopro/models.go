@@ -12,6 +12,13 @@ import (
 	"time"
 )
 
+// HardwareInfo represents the response from the hardware info API.
+type HardwareInfo struct {
+	ModelName       string `json:"model_name"`
+	SerialNumber    string `json:"serial_number"`
+	FirmwareVersion string `json:"firmware_version"`
+}
+
 // MediaList represents the top-level response from the media list API.
 type MediaList struct {
 	ID    string       `json:"id"`    // Media list identifier
