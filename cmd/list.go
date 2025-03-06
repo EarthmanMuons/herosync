@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
 	"github.com/EarthmanMuons/herosync/internal/gopro"
@@ -43,10 +44,10 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	for _, dir := range mediaList.Media {
 		for _, item := range dir.Items {
-			fmt.Printf("%s (created: %s, size: %d bytes)\n",
+			fmt.Printf("%s (created: %s, size: %s bytes)\n",
 				item.Filename,
 				item.CreatedAt.Time().Format(time.RFC3339),
-				item.Size)
+				humanize.Bytes(uint64(item.Size)))
 		}
 	}
 

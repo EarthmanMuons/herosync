@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	github.com/adrg/xdg v0.5.3
+	github.com/dustin/go-humanize v1.0.1
 	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/knadh/koanf/parsers/toml/v2 v2.1.0
 	github.com/knadh/koanf/providers/confmap v0.1.0

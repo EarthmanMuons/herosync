@@ -85,7 +85,7 @@ func (t *Timestamp) UnmarshalJSON(data []byte) error {
 }
 
 // String64 is an int64 that can be unmarshaled from either a string or number.
-type String64 int64
+type String64 uint64
 
 func (s String64) MarshalJSON() ([]byte, error) {
 	return fmt.Appendf(nil, "%d", s), nil
@@ -101,7 +101,7 @@ func (s *String64) UnmarshalJSON(data []byte) error {
 	case float64:
 		*s = String64(v)
 	case string:
-		i, err := strconv.ParseInt(v, 10, 64)
+		i, err := strconv.ParseUint(v, 10, 64)
 		if err != nil {
 			return err
 		}
