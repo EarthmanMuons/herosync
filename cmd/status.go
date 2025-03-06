@@ -17,8 +17,6 @@ var statusCmd = &cobra.Command{
 }
 
 func init() {
-	statusCmd.Flags().String("gopro-host", "", "GoPro host (hostname:port or IP)")
-	statusCmd.Flags().String("gopro-scheme", "", "GoPro scheme (http/https)")
 	rootCmd.AddCommand(statusCmd)
 }
 

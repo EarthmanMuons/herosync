@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -9,6 +11,20 @@ import (
 
 	"github.com/EarthmanMuons/herosync/config"
 )
+
+func ensureDir(path string) error {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("failed to resolve absolute path: %w", err)
+	}
+
+	err = os.MkdirAll(absPath, 0o750)
+	if err != nil {
+		return fmt.Errorf("failed to create directory %s: %w", absPath, err)
+	}
+
+	return nil
+}
 
 // getConfigWithFlags collects any set flags from the command and applies them to the configuration.
 func getConfigWithFlags(cmd *cobra.Command) (*config.Config, error) {

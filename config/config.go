@@ -27,11 +27,19 @@ type Config struct {
 	Log struct {
 		Level string `koanf:"level"`
 	} `koanf:"log"`
+	Output struct {
+		Dir string `koanf:"dir"`
+	} `koanf:"output"`
 }
 
 // DefaultConfigPath returns the default config file path following XDG specification.
 func DefaultConfigPath() string {
 	return filepath.Join(xdg.ConfigHome, "herosync", "config.toml")
+}
+
+// DefaultOutputDir returns the default output directory following XDG specification.
+func DefaultOutputDir() string {
+	return filepath.Join(xdg.DataHome, "herosync", "media")
 }
 
 func Init(configFile string, flags map[string]any) error {
@@ -63,6 +71,7 @@ func loadDefaults() error {
 		"gopro.host":   "", // Empty means use mDNS discovery
 		"gopro.scheme": "http",
 		"log.level":    "info",
+		"output.dir":   DefaultOutputDir(),
 	}
 	return k.Load(confmap.Provider(defaults, "."), nil)
 }

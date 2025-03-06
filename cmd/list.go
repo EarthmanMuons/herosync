@@ -44,9 +44,9 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	for _, dir := range mediaList.Media {
 		for _, item := range dir.Items {
-			fmt.Printf("%s (created: %s, size: %s bytes)\n",
+			fmt.Printf("%s (created: %s, size: %s)\n",
 				item.Filename,
-				item.CreatedAt.Time().Format(time.RFC3339),
+				item.CreatedAt.Time().Format(time.DateTime),
 				humanize.Bytes(uint64(item.Size)))
 		}
 	}

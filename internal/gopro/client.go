@@ -35,6 +35,18 @@ func NewClient(baseURL *url.URL, logger *slog.Logger) *Client {
 
 // API methods
 
+// func (c *Client) DownloadMediaFile(ctx context.Context, directory string, filename string, localPath string) error {
+// 	downloadURL := fmt.Sprintf("/videos/DCIM/%s/%s", directory, filename)
+//
+// 	resp, err := c.get(ctx, downloadURL)
+// 	if err != nil {
+// 		return fmt.Errorf("downloading media file: %w", err)
+// 	}
+// 	defer resp.Body.Close()
+
+// 	return nil
+// }
+
 func (c *Client) GetHardwareInfo(ctx context.Context) (*HardwareInfo, error) {
 	resp, err := c.get(ctx, "/gopro/camera/info")
 	if err != nil {
@@ -62,14 +74,16 @@ func (c *Client) GetMediaList(ctx context.Context) (*MediaList, error) {
 		return nil, fmt.Errorf("decoding response: %w", err)
 	}
 
-	// Get camera's timezone offset and adjust the media timestamps.
-	tzOffset, err := c.getTimezoneOffset(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("getting timezone offset: %w", err)
-	}
+	if len(mediaList.Media) != 0 {
+		// Get camera's timezone offset and adjust the media timestamps.
+		tzOffset, err := c.getTimezoneOffset(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("getting timezone offset: %w", err)
+		}
 
-	if err := adjustTimestamps(&mediaList, tzOffset); err != nil {
-		return nil, fmt.Errorf("adjusting timestamps: %w", err)
+		if err := adjustTimestamps(&mediaList, tzOffset); err != nil {
+			return nil, fmt.Errorf("adjusting timestamps: %w", err)
+		}
 	}
 
 	return &mediaList, nil

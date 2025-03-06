@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -17,24 +18,25 @@ type rootOptions struct {
 	logLevel   string
 }
 
-var opts rootOptions
+var rootOpts rootOptions
 
 var rootCmd = &cobra.Command{
 	Use:   "herosync",
 	Short: "Download, combine, and publish GoPro videos with ease",
-	Long: `A tool for automating GoPro video transfers. Download media files over WiFi,
-combine chapters into complete videos, clean up storage, and optionally publish
-to YouTube.`,
+	CompletionOptions: cobra.CompletionOptions{
+		HiddenDefaultCmd: true,
+	},
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		if opts.logLevel == "" {
+		// Bootstrap the logger as early as possible.
+		if rootOpts.logLevel == "" {
 			cfg, err := config.Get()
 			if err != nil {
 				log.Fatalf("Failed to get config: %v", err)
 			}
-			opts.logLevel = cfg.Log.Level
+			rootOpts.logLevel = cfg.Log.Level
 		}
 
-		logging.Initialize(opts.logLevel)
+		logging.Initialize(rootOpts.logLevel)
 	},
 }
 
@@ -46,19 +48,42 @@ func Execute() {
 }
 
 func init() {
+	cobra.EnableCommandSorting = false
 	cobra.OnInitialize(initConfig)
 
-	// Global flags
-	rootCmd.PersistentFlags().StringVar(&opts.configFile, "config-file", "",
+	// Global Flags
+
+	rootCmd.PersistentFlags().StringVar(&rootOpts.configFile, "config-file", "",
 		fmt.Sprintf("configuration file path\n"+
 			"[env: HEROSYNC_CONFIG_FILE]\n"+
 			"[default: %s]\n",
 			shortenPath(config.DefaultConfigPath())))
 
-	rootCmd.PersistentFlags().StringVar(&opts.logLevel, "log-level", "",
-		"logging level (debug, info, warn, error)\n"+
+	rootCmd.MarkPersistentFlagFilename("config-file", "toml")
+
+	rootCmd.PersistentFlags().String("gopro-host", "",
+		fmt.Sprint("GoPro URL host (IP, hostname:port, \"\" for mDNS discovery)\n"+
+			"[env: HEROSYNC_GOPRO_HOST]\n"+
+			"[default: \"\"]\n"))
+
+	rootCmd.PersistentFlags().String("gopro-scheme", "",
+		fmt.Sprint("GoPro URL scheme (http, https)\n"+
+			"[env: HEROSYNC_GOPRO_SCHEME]\n"+
+			"[default: http]\n"))
+
+	rootCmd.PersistentFlags().StringVarP(&rootOpts.logLevel, "log-level", "l", "",
+		fmt.Sprint("logging level (debug, info, warn, error)\n"+
 			"[env: HEROSYNC_LOG_LEVEL]\n"+
-			"[default: info]\n")
+			"[default: info]\n"))
+
+	rootCmd.PersistentFlags().StringP("output-dir", "o", "",
+		fmt.Sprintf("output directory path\n"+
+			"[env: HEROSYNC_OUTPUT_DIR]\n"+
+			"[default: %s%c]\n",
+			shortenPath(config.DefaultOutputDir()),
+			filepath.Separator))
+
+	rootCmd.MarkPersistentFlagDirname("output-dir")
 }
 
 func initConfig() {
@@ -68,15 +93,15 @@ func initConfig() {
 	})
 
 	// Only use environment variable or default path if --config-file flag wasn't explicitly set
-	if opts.configFile == "" {
+	if rootOpts.configFile == "" {
 		if envConfig := os.Getenv("HEROSYNC_CONFIG_FILE"); envConfig != "" {
-			opts.configFile = envConfig
+			rootOpts.configFile = envConfig
 		} else {
-			opts.configFile = config.DefaultConfigPath()
+			rootOpts.configFile = config.DefaultConfigPath()
 		}
 	}
 
-	if err := config.Init(opts.configFile, flags); err != nil {
+	if err := config.Init(rootOpts.configFile, flags); err != nil {
 		log.Fatal(err)
 	}
 }
