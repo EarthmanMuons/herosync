@@ -7,32 +7,25 @@ import (
 )
 
 var (
-	Logger *slog.Logger
+	logger *slog.Logger
 	once   sync.Once
 )
 
-func Init(level string) {
+func Initialize(level string) {
 	once.Do(func() {
+		var lvl slog.Level
+		if err := lvl.UnmarshalText([]byte(level)); err != nil {
+			lvl = slog.LevelInfo // default to INFO if invalid level
+		}
+
 		opts := &slog.HandlerOptions{
-			Level: parseLevel(level),
+			Level: lvl,
 		}
 		handler := slog.NewTextHandler(os.Stderr, opts)
-		Logger = slog.New(handler)
+		logger = slog.New(handler)
 	})
 }
 
-// parseLevel converts a string level to slog.Level
-func parseLevel(level string) slog.Level {
-	switch level {
-	case "debug":
-		return slog.LevelDebug
-	case "info":
-		return slog.LevelInfo
-	case "warn":
-		return slog.LevelWarn
-	case "error":
-		return slog.LevelError
-	default:
-		return slog.LevelInfo
-	}
+func GetLogger() *slog.Logger {
+	return logger
 }

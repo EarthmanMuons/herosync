@@ -34,7 +34,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to resolve GoPro connection: %v", err)
 	}
 
-	client := gopro.NewClient(baseURL, logging.Logger)
+	client := gopro.NewClient(baseURL, logging.GetLogger())
 
 	mediaList, err := client.GetMediaList(cmd.Context())
 	if err != nil {

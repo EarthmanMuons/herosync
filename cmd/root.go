@@ -34,7 +34,7 @@ to YouTube.`,
 			opts.logLevel = cfg.Log.Level
 		}
 
-		logging.Init(opts.logLevel)
+		logging.Initialize(opts.logLevel)
 	},
 }
 
@@ -56,7 +56,7 @@ func init() {
 			shortenPath(config.DefaultConfigPath())))
 
 	rootCmd.PersistentFlags().StringVar(&opts.logLevel, "log-level", "",
-		"logging level (none, error, warn, info, debug)\n"+
+		"logging level (debug, info, warn, error)\n"+
 			"[env: HEROSYNC_LOG_LEVEL]\n"+
 			"[default: info]\n")
 }

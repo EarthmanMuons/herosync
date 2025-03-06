@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -98,14 +99,16 @@ func Get() (*Config, error) {
 }
 
 func validateConfig(cfg *Config) error {
-	if cfg.GoPro.Scheme != "http" && cfg.GoPro.Scheme != "https" {
+	switch cfg.GoPro.Scheme {
+	case "http", "https":
+		// valid
+	default:
 		return fmt.Errorf("invalid scheme: %s; choose http or https", cfg.GoPro.Scheme)
 	}
 
-	switch cfg.Log.Level {
-	case "none", "error", "warn", "info", "debug":
-		// valid
-	default:
+	// Try unmarshaling the log level to validate it.
+	var level slog.Level
+	if err := level.UnmarshalText([]byte(cfg.Log.Level)); err != nil {
 		return fmt.Errorf("invalid log level: %s", cfg.Log.Level)
 	}
 
