@@ -23,7 +23,6 @@ func getConfigWithFlags(cmd *cobra.Command) (*config.Config, error) {
 	return config.Get()
 }
 
-
 // shortenPath replaces the home directory path with ~
 func shortenPath(path string) string {
 	home, err := os.UserHomeDir()

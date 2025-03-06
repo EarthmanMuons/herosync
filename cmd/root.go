@@ -9,9 +9,17 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/EarthmanMuons/herosync/config"
+	"github.com/EarthmanMuons/herosync/internal/logging"
 )
 
-var configFile string
+var (
+	configFile string
+	cmdOptions RootOptions
+)
+
+type RootOptions struct {
+	LogLevel string
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "herosync",
@@ -19,6 +27,17 @@ var rootCmd = &cobra.Command{
 	Long: `A tool for automating GoPro video transfers. Download media files over WiFi,
 combine chapters into complete videos, clean up storage, and optionally publish
 to YouTube.`,
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		if cmdOptions.LogLevel == "" {
+			cfg, err := config.Get()
+			if err != nil {
+				log.Fatalf("Failed to get config: %v", err)
+			}
+			cmdOptions.LogLevel = cfg.Log.Level
+		}
+
+		logging.Init(cmdOptions.LogLevel)
+	},
 }
 
 func Execute() {
@@ -37,6 +56,11 @@ func init() {
 			"[env: HEROSYNC_CONFIG_FILE]\n"+
 			"[default: %s]\n",
 			shortenPath(config.DefaultConfigPath())))
+
+	rootCmd.PersistentFlags().StringVar(&cmdOptions.LogLevel, "log-level", "",
+		"logging level (none, error, warn, info, debug)\n"+
+			"[env: HEROSYNC_LOG_LEVEL]\n"+
+			"[default: info]\n")
 }
 
 func initConfig() {

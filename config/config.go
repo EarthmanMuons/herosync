@@ -23,6 +23,9 @@ type Config struct {
 		Host   string `koanf:"host"`
 		Scheme string `koanf:"scheme"`
 	} `koanf:"gopro"`
+	Log struct {
+		Level string `koanf:"level"`
+	} `koanf:"log"`
 }
 
 // DefaultConfigPath returns the default config file path following XDG specification.
@@ -58,8 +61,8 @@ func loadDefaults() error {
 	defaults := map[string]any{
 		"gopro.host":   "", // Empty means use mDNS discovery
 		"gopro.scheme": "http",
+		"log.level":    "info",
 	}
-
 	return k.Load(confmap.Provider(defaults, "."), nil)
 }
 
@@ -98,6 +101,14 @@ func validateConfig(cfg *Config) error {
 	if cfg.GoPro.Scheme != "http" && cfg.GoPro.Scheme != "https" {
 		return fmt.Errorf("invalid scheme: %s; choose http or https", cfg.GoPro.Scheme)
 	}
+
+	switch cfg.Log.Level {
+	case "none", "error", "warn", "info", "debug":
+		// valid
+	default:
+		return fmt.Errorf("invalid log level: %s", cfg.Log.Level)
+	}
+
 	return nil
 }
 

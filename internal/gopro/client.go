@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -14,17 +15,21 @@ import (
 type Client struct {
 	httpClient *retryablehttp.Client
 	baseURL    *url.URL
+	logger     *slog.Logger
 }
 
-func NewClient(baseURL *url.URL) *Client {
+func NewClient(baseURL *url.URL, logger *slog.Logger) *Client {
 	client := retryablehttp.NewClient()
 	client.RetryMax = 3
 	client.RetryWaitMin = 1 * time.Second
 	client.RetryWaitMax = 30 * time.Second
 
+	client.Logger = logger
+
 	return &Client{
 		httpClient: client,
 		baseURL:    baseURL,
+		logger:     logger,
 	}
 }
 

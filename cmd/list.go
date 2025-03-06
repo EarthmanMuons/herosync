@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/EarthmanMuons/herosync/internal/gopro"
+	"github.com/EarthmanMuons/herosync/internal/logging"
 )
 
 var listCmd = &cobra.Command{
@@ -33,7 +34,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to resolve GoPro connection: %v", err)
 	}
 
-	client := gopro.NewClient(baseURL)
+	client := gopro.NewClient(baseURL, logging.Logger)
 
 	mediaList, err := client.GetMediaList(cmd.Context())
 	if err != nil {
