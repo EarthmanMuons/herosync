@@ -2,15 +2,14 @@ package cmd
 
 import (
 	"fmt"
-	"path/filepath"
 	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
-	"github.com/EarthmanMuons/herosync/internal/fsutil"
 	"github.com/EarthmanMuons/herosync/internal/gopro"
 	"github.com/EarthmanMuons/herosync/internal/logging"
+	"github.com/EarthmanMuons/herosync/internal/media"
 )
 
 var listCmd = &cobra.Command{
@@ -44,30 +43,15 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	client := gopro.NewClient(baseURL, logging.GetLogger())
 
-	mediaList, err := client.GetMediaList(cmd.Context())
+	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.Output.Dir)
 	if err != nil {
 		return err
 	}
 
-	// Convert outputDir to an absolute path
-	absOutputDir, err := filepath.Abs(cfg.Output.Dir)
-	if err != nil {
-		return fmt.Errorf("getting absolute path for output directory: %w", err)
-	}
-
-	for _, media := range mediaList.Media {
-		for _, file := range media.Items {
-			localFilePath := filepath.Join(absOutputDir, file.Filename)
-			createdAt := file.CreatedAt.Format(time.DateTime)
-			humanSize := humanize.Bytes(uint64(file.Size))
-
-			status := "only stored on gopro"
-			if fsutil.FileExistsAndMatchesSize(localFilePath, file.Size) {
-				status = "file has been synced"
-			}
-
-			fmt.Printf("%-14s  %s  %7s   %s\n", file.Filename, createdAt, humanSize, status)
-		}
+	for _, file := range inventory.Files {
+		createdAt := file.CreatedAt.Format(time.DateTime)
+		humanSize := humanize.Bytes(uint64(file.Size))
+		fmt.Printf("%-14s  %s  %7s   %s\n", file.Filename, createdAt, humanSize, file.Status)
 	}
 
 	return nil
