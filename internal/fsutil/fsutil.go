@@ -8,7 +8,7 @@ import (
 )
 
 // FileExistsAndMatchesSize checks if a file exists and has the expected size.
-func FileExistsAndMatchesSize(filePath string, expectedSize uint64) bool {
+func FileExistsAndMatchesSize(filePath string, expectedSize int64) bool {
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -18,7 +18,7 @@ func FileExistsAndMatchesSize(filePath string, expectedSize uint64) bool {
 		return false
 	}
 
-	return uint64(fileInfo.Size()) == expectedSize
+	return fileInfo.Size() == expectedSize
 }
 
 // ShortenPath replaces the home directory path with ~

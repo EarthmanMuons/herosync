@@ -19,10 +19,10 @@ var listCmd = &cobra.Command{
 	Short:   "List media files on connected GoPro",
 	RunE:    runList,
 
-	// only stored on gopro = File exists on GoPro but not on local storage
-	// only stored on local = File exists on local storage but not on GoPro
-	// file has been synced = File exists identically both on GoPro and locally
-	// FILE VERSIONS DIFFER = File exists in both places, but contents do not match
+	// only stored on gopro = File exists only on the GoPro
+	// only stored on local = File exists only locally
+	// file has been synced = File exists on both, with matching sizes
+	// SIZES ARE MISMATCHED = File exists on both, but sizes differ
 }
 
 func init() {
@@ -58,11 +58,11 @@ func runList(cmd *cobra.Command, args []string) error {
 	for _, media := range mediaList.Media {
 		for _, file := range media.Items {
 			localFilePath := filepath.Join(absOutputDir, file.Filename)
-			createdAt := file.CreatedAt.Time().Format(time.DateTime)
+			createdAt := file.CreatedAt.Format(time.DateTime)
 			humanSize := humanize.Bytes(uint64(file.Size))
 
 			status := "only stored on gopro"
-			if fsutil.FileExistsAndMatchesSize(localFilePath, (uint64(file.Size))) {
+			if fsutil.FileExistsAndMatchesSize(localFilePath, file.Size) {
 				status = "file has been synced"
 			}
 

@@ -34,8 +34,8 @@ type MediaFiles struct {
 // MediaListItem represents a single media file and its metadata.
 type MediaListItem struct {
 	Filename  string    `json:"n"`   // Media filename
-	CreatedAt Timestamp `json:"cre"` // Creation time in seconds since epoch
-	Size      String64  `json:"s"`   // Size of media in bytes
+	CreatedAt time.Time `json:"cre"` // Creation time in seconds since epoch
+	Size      int64     `json:"s"`   // Size of media in bytes
 }
 
 type cameraDateTime struct {
@@ -45,70 +45,30 @@ type cameraDateTime struct {
 	TZOffset int    `json:"tzone"` // Timezone offset in minutes
 }
 
-// String64 is an int64 that can be unmarshaled from either a string or number.
-type String64 uint64
-
-// Timestamp is a Unix timestamp that can be unmarshaled from either a string or number.
-type Timestamp int64
-
-func (s String64) MarshalJSON() ([]byte, error) {
-	return fmt.Appendf(nil, "%d", s), nil
-}
-
-func (s *String64) UnmarshalJSON(data []byte) error {
-	var raw any
-	if err := json.Unmarshal(data, &raw); err != nil {
+func (m *MediaListItem) UnmarshalJSON(data []byte) error {
+	type Alias MediaListItem // Avoid recursion
+	aux := &struct {
+		CreatedAt string `json:"cre"` // Unmarshal as string
+		Size      string `json:"s"`   // Unmarshal as string
+		*Alias
+	}{
+		Alias: (*Alias)(m),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
 
-	switch v := raw.(type) {
-	case float64:
-		*s = String64(v)
-	case string:
-		i, err := strconv.ParseUint(v, 10, 64)
-		if err != nil {
-			return err
-		}
-		*s = String64(i)
-	default:
-		return fmt.Errorf("unexpected type for String64: %T", v)
+	seconds, err := strconv.ParseInt(aux.CreatedAt, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid creation timestamp '%s': %w", aux.CreatedAt, err)
 	}
+	m.CreatedAt = time.Unix(seconds, 0) // Parse as UTC!
 
-	return nil
-}
-
-// Time converts the Unix timestamp to time.Time.
-func (t Timestamp) Time() time.Time {
-	return time.Unix(int64(t), 0)
-}
-
-// String returns the timestamp as a formatted string.
-func (t Timestamp) String() string {
-	return t.Time().String()
-}
-
-func (t Timestamp) MarshalJSON() ([]byte, error) {
-	return fmt.Appendf(nil, "%d", t), nil
-}
-
-func (t *Timestamp) UnmarshalJSON(data []byte) error {
-	var raw any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
+	parsedSize, err := strconv.ParseInt(aux.Size, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid size string '%s': %w", aux.Size, err)
 	}
-
-	switch v := raw.(type) {
-	case float64:
-		*t = Timestamp(v)
-	case string:
-		i, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			return err
-		}
-		*t = Timestamp(i)
-	default:
-		return fmt.Errorf("unexpected type for Timestamp: %T", v)
-	}
+	m.Size = parsedSize
 
 	return nil
 }

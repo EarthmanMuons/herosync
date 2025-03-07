@@ -188,17 +188,15 @@ func (pw *progressWriter) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// adjustTimestamps converts camera-local timestamps to UTC while preserving timezone info.
+// adjustTimestamps converts camera-local timestamps to UTC.
 func adjustTimestamps(mediaList *MediaList, tzOffset int) error {
-	loc := time.FixedZone("Camera", tzOffset*60)
+	for _, media := range mediaList.Media {
+		for file := range media.Items {
+			originalTime := media.Items[file].CreatedAt
+			adjustedTime := originalTime.Add(-time.Duration(tzOffset) * time.Minute)
 
-	for _, dir := range mediaList.Media {
-		for i := range dir.Items {
-			localTime := time.Unix(int64(dir.Items[i].CreatedAt), 0)
-			utcTime := localTime.Add(time.Duration(-tzOffset) * time.Minute)
-			dir.Items[i].CreatedAt = Timestamp(utcTime.In(loc).Unix())
+			media.Items[file].CreatedAt = adjustedTime
 		}
 	}
-
 	return nil
 }
