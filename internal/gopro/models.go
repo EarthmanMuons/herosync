@@ -45,8 +45,37 @@ type cameraDateTime struct {
 	TZOffset int    `json:"tzone"` // Timezone offset in minutes
 }
 
+// String64 is an int64 that can be unmarshaled from either a string or number.
+type String64 uint64
+
 // Timestamp is a Unix timestamp that can be unmarshaled from either a string or number.
 type Timestamp int64
+
+func (s String64) MarshalJSON() ([]byte, error) {
+	return fmt.Appendf(nil, "%d", s), nil
+}
+
+func (s *String64) UnmarshalJSON(data []byte) error {
+	var raw any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	switch v := raw.(type) {
+	case float64:
+		*s = String64(v)
+	case string:
+		i, err := strconv.ParseUint(v, 10, 64)
+		if err != nil {
+			return err
+		}
+		*s = String64(i)
+	default:
+		return fmt.Errorf("unexpected type for String64: %T", v)
+	}
+
+	return nil
+}
 
 // Time converts the Unix timestamp to time.Time.
 func (t Timestamp) Time() time.Time {
@@ -79,35 +108,6 @@ func (t *Timestamp) UnmarshalJSON(data []byte) error {
 		*t = Timestamp(i)
 	default:
 		return fmt.Errorf("unexpected type for Timestamp: %T", v)
-	}
-
-	return nil
-}
-
-// String64 is an int64 that can be unmarshaled from either a string or number.
-type String64 uint64
-
-func (s String64) MarshalJSON() ([]byte, error) {
-	return fmt.Appendf(nil, "%d", s), nil
-}
-
-func (s *String64) UnmarshalJSON(data []byte) error {
-	var raw any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-
-	switch v := raw.(type) {
-	case float64:
-		*s = String64(v)
-	case string:
-		i, err := strconv.ParseUint(v, 10, 64)
-		if err != nil {
-			return err
-		}
-		*s = String64(i)
-	default:
-		return fmt.Errorf("unexpected type for String64: %T", v)
 	}
 
 	return nil

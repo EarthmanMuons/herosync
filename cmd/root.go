@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/EarthmanMuons/herosync/config"
+	"github.com/EarthmanMuons/herosync/internal/fsutil"
 	"github.com/EarthmanMuons/herosync/internal/logging"
 )
 
@@ -57,7 +58,7 @@ func init() {
 		fmt.Sprintf("configuration file path\n"+
 			"[env: HEROSYNC_CONFIG_FILE]\n"+
 			"[default: %s]\n",
-			shortenPath(config.DefaultConfigPath())))
+			fsutil.ShortenPath(config.DefaultConfigPath())))
 
 	rootCmd.MarkPersistentFlagFilename("config-file", "toml")
 
@@ -80,7 +81,7 @@ func init() {
 		fmt.Sprintf("output directory path\n"+
 			"[env: HEROSYNC_OUTPUT_DIR]\n"+
 			"[default: %s%c]\n",
-			shortenPath(config.DefaultOutputDir()),
+			fsutil.ShortenPath(config.DefaultOutputDir()),
 			filepath.Separator))
 
 	rootCmd.MarkPersistentFlagDirname("output-dir")
@@ -104,4 +105,17 @@ func initConfig() {
 	if err := config.Init(rootOpts.configFile, flags); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// getConfigWithFlags collects any set flags from the command and applies them to the configuration.
+func getConfigWithFlags(cmd *cobra.Command) (*config.Config, error) {
+	flags := make(map[string]any)
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flags[f.Name] = f.Value.String()
+	})
+
+	if err := config.LoadFlags(flags); err != nil {
+		return nil, err
+	}
+	return config.Get()
 }

@@ -2,11 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
+	"github.com/EarthmanMuons/herosync/internal/fsutil"
 	"github.com/EarthmanMuons/herosync/internal/gopro"
 	"github.com/EarthmanMuons/herosync/internal/logging"
 )
@@ -16,6 +18,11 @@ var listCmd = &cobra.Command{
 	Aliases: []string{"ls"},
 	Short:   "List media files on connected GoPro",
 	RunE:    runList,
+
+	// gopro only = File exists on GoPro but not on local storage
+	// local only = File exists on local storage but not on GoPro
+	// saved both = File exists both locally and on GoPro
+	// MISMATCHED = File exists in both places but does not match
 }
 
 func init() {
@@ -42,12 +49,24 @@ func runList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	for _, dir := range mediaList.Media {
-		for _, item := range dir.Items {
-			fmt.Printf("%s (created: %s, size: %s)\n",
-				item.Filename,
-				item.CreatedAt.Time().Format(time.DateTime),
-				humanize.Bytes(uint64(item.Size)))
+	// Convert outputDir to an absolute path
+	absOutputDir, err := filepath.Abs(cfg.Output.Dir)
+	if err != nil {
+		return fmt.Errorf("getting absolute path for output directory: %w", err)
+	}
+
+	for _, media := range mediaList.Media {
+		for _, file := range media.Items {
+			localFilePath := filepath.Join(absOutputDir, file.Filename)
+			createdAt := file.CreatedAt.Time().Format(time.DateTime)
+			humanSize := humanize.Bytes(uint64(file.Size))
+
+			status := "gopro only"
+			if fsutil.FileExistsAndMatchesSize(localFilePath, (uint64(file.Size))) {
+				status = "saved both"
+			}
+
+			fmt.Printf("%-14s  %s  %7s   %s\n", file.Filename, createdAt, humanSize, status)
 		}
 	}
 
