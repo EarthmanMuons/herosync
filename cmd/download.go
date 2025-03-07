@@ -36,10 +36,6 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := ensureDir(cfg.Output.Dir); err != nil {
-		return err
-	}
-
 	baseURL, err := cfg.GetGoProURL()
 	if err != nil {
 		return fmt.Errorf("failed to resolve GoPro connection: %v", err)
@@ -59,11 +55,10 @@ func runDownload(cmd *cobra.Command, args []string) error {
 
 	for _, dir := range mediaList.Media {
 		for _, item := range dir.Items {
-			log.Debug("starting download", "directory", dir.Directory, "filename", item.Filename, "size", item.Size)
-			// localPath := filepath.Join(cfg.Output.Dir, item.Filename)
-			// if err := client.DownloadMediaFile(dir.Directory, item.Filename, localPath); err != nil {
-			// 	return err
-			// }
+			log.Debug("starting download", "filename", item.Filename, "size", item.Size)
+			if err := client.DownloadMediaFile(cmd.Context(), dir.Directory, item.Filename, cfg.Output.Dir); err != nil {
+				return err
+			}
 		}
 	}
 

@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/hashicorp/go-retryablehttp"
@@ -18,12 +21,18 @@ type Client struct {
 	logger     *slog.Logger
 }
 
+// progressWriter wraps an io.Reader to report download progress periodically.
+type progressWriter struct {
+	reader     io.Reader
+	totalSize  int64
+	written    int64
+	logger     *slog.Logger
+	interval   time.Duration
+	lastUpdate time.Time
+}
+
 func NewClient(baseURL *url.URL, logger *slog.Logger) *Client {
 	client := retryablehttp.NewClient()
-	client.RetryMax = 3
-	client.RetryWaitMin = 1 * time.Second
-	client.RetryWaitMax = 30 * time.Second
-
 	client.Logger = logger
 
 	return &Client{
@@ -32,20 +41,6 @@ func NewClient(baseURL *url.URL, logger *slog.Logger) *Client {
 		logger:     logger,
 	}
 }
-
-// API methods
-
-// func (c *Client) DownloadMediaFile(ctx context.Context, directory string, filename string, localPath string) error {
-// 	downloadURL := fmt.Sprintf("/videos/DCIM/%s/%s", directory, filename)
-//
-// 	resp, err := c.get(ctx, downloadURL)
-// 	if err != nil {
-// 		return fmt.Errorf("downloading media file: %w", err)
-// 	}
-// 	defer resp.Body.Close()
-
-// 	return nil
-// }
 
 func (c *Client) GetHardwareInfo(ctx context.Context) (*HardwareInfo, error) {
 	resp, err := c.get(ctx, "/gopro/camera/info")
@@ -89,6 +84,77 @@ func (c *Client) GetMediaList(ctx context.Context) (*MediaList, error) {
 	return &mediaList, nil
 }
 
+func (c *Client) DownloadMediaFile(ctx context.Context, directory string, filename string, outputDir string) error {
+	reqURL := fmt.Sprintf("/videos/DCIM/%s/%s", directory, filename)
+
+	resp, err := c.get(ctx, reqURL)
+	if err != nil {
+		return fmt.Errorf("downloading media file: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Convert outputDir to an absolute path.
+	absOutputDir, err := filepath.Abs(outputDir)
+	if err != nil {
+		return fmt.Errorf("getting absolute path for output directory: %w", err)
+	}
+
+	fullLocalPath := filepath.Join(absOutputDir, filename)
+	if err := os.MkdirAll(filepath.Dir(fullLocalPath), 0o750); err != nil {
+		return fmt.Errorf("creating directory: %w", err)
+	}
+
+	out, err := os.Create(fullLocalPath)
+	if err != nil {
+		return fmt.Errorf("creating file: %w", err)
+	}
+	defer out.Close()
+
+	totalSize := resp.ContentLength
+	if totalSize <= 0 {
+		c.logger.Warn("Content-Length header not found or invalid, progress won't show total size.")
+	}
+
+	progressReader := &progressWriter{
+		reader:     resp.Body,
+		totalSize:  totalSize,
+		logger:     c.logger,
+		interval:   5 * time.Second,
+		lastUpdate: time.Now(),
+	}
+
+	_, err = io.Copy(out, progressReader)
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return fmt.Errorf("writing to file: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Client) get(ctx context.Context, path string) (*http.Response, error) {
+	reqURL := c.baseURL.JoinPath(path)
+
+	req, err := retryablehttp.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("doing request: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		defer resp.Body.Close()
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	return resp, nil
+}
+
 func (c *Client) getTimezoneOffset(ctx context.Context) (int, error) {
 	resp, err := c.get(ctx, "/gopro/camera/get_date_time")
 	if err != nil {
@@ -104,6 +170,24 @@ func (c *Client) getTimezoneOffset(ctx context.Context) (int, error) {
 	return dt.TZOffset, nil
 }
 
+func (pw *progressWriter) Read(p []byte) (int, error) {
+	n, err := pw.reader.Read(p)
+	pw.written += int64(n)
+
+	now := time.Now()
+	if now.Sub(pw.lastUpdate) >= pw.interval {
+		if pw.totalSize > 0 {
+			percent := float64(pw.written) / float64(pw.totalSize) * 100
+			pw.logger.Info("download progress", "filename", filepath.Base(pw.reader.(io.ReadCloser).(*os.File).Name()), "progress", fmt.Sprintf("%.2f%%", percent), "written", pw.written, "total", pw.totalSize)
+		} else {
+			pw.logger.Info("download progress", "filename", filepath.Base(pw.reader.(io.ReadCloser).(*os.File).Name()), "written", pw.written)
+		}
+		pw.lastUpdate = now
+	}
+
+	return n, err
+}
+
 // adjustTimestamps converts camera-local timestamps to UTC while preserving timezone info.
 func adjustTimestamps(mediaList *MediaList, tzOffset int) error {
 	loc := time.FixedZone("Camera", tzOffset*60)
@@ -117,26 +201,4 @@ func adjustTimestamps(mediaList *MediaList, tzOffset int) error {
 	}
 
 	return nil
-}
-
-// Helper method for making GET requests.
-func (c *Client) get(ctx context.Context, path string) (*http.Response, error) {
-	u := c.baseURL.JoinPath(path)
-
-	req, err := retryablehttp.NewRequestWithContext(ctx, "GET", u.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("executing request: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		defer resp.Body.Close()
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	return resp, nil
 }
