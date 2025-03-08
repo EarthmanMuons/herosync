@@ -40,8 +40,27 @@ func (fs FileStatus) String() string {
 	}
 }
 
+// Symbol provides a symbolic representation of the FileStatus.
+func (fs FileStatus) Symbol() string {
+	switch fs {
+	case StatusOnlyGoPro:
+		return "«"
+	case StatusOnlyLocal:
+		return "»"
+	case StatusSynced:
+		return "="
+	case StatusDifferent:
+		return "!"
+	case StatusError:
+		return "?"
+	default:
+		return fmt.Sprintf("unknown status (%d)", int(fs))
+	}
+}
+
 // MediaFile represents a single media file and its synchronization status.
 type MediaFile struct {
+	Directory string
 	Filename  string
 	CreatedAt time.Time
 	Size      int64
@@ -90,6 +109,7 @@ func NewMediaInventory(ctx context.Context, goproClient *gopro.Client, outputDir
 			}
 
 			mediaFile := MediaFile{
+				Directory: media.Directory,
 				Filename:  file.Filename,
 				CreatedAt: file.CreatedAt,
 				Size:      file.Size,
@@ -103,6 +123,7 @@ func NewMediaInventory(ctx context.Context, goproClient *gopro.Client, outputDir
 	// Add any remaining local files.
 	for localFileName, localFileSize := range localFiles {
 		mediaFile := MediaFile{
+			Directory: absOutputDir, // Assume no subdirectory
 			Filename:  localFileName,
 			CreatedAt: time.Time{},
 			Size:      localFileSize,

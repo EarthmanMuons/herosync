@@ -51,7 +51,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	for _, file := range inventory.Files {
 		createdAt := file.CreatedAt.Format(time.DateTime)
 		humanSize := humanize.Bytes(uint64(file.Size))
-		fmt.Printf("%-14s  %s  %7s   %s\n", file.Filename, createdAt, humanSize, file.Status)
+		fmt.Printf("%s %-15s %s %8s %22s\n", file.Status.Symbol(), file.Filename, createdAt, humanSize, file.Status)
 	}
 
 	return nil
