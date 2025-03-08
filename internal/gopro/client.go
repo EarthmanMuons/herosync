@@ -1,3 +1,7 @@
+// Package gopro provides a client for interacting with GoPro cameras.
+//
+// This client implements the Open GoPro API as documented at:
+// https://gopro.github.io/OpenGoPro/http
 package gopro
 
 import (
@@ -44,6 +48,7 @@ func NewClient(baseURL *url.URL, logger *slog.Logger) *Client {
 	}
 }
 
+// Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Query/operation/OGP_CAMERA_INFO
 func (c *Client) GetHardwareInfo(ctx context.Context) (*HardwareInfo, error) {
 	resp, err := c.get(ctx, "/gopro/camera/info")
 	if err != nil {
@@ -59,6 +64,7 @@ func (c *Client) GetHardwareInfo(ctx context.Context) (*HardwareInfo, error) {
 	return &hwInfo, nil
 }
 
+// Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Media/operation/OGP_MEDIA_LIST
 func (c *Client) GetMediaList(ctx context.Context) (*MediaList, error) {
 	resp, err := c.get(ctx, "/gopro/media/list")
 	if err != nil {
@@ -86,6 +92,7 @@ func (c *Client) GetMediaList(ctx context.Context) (*MediaList, error) {
 	return &mediaList, nil
 }
 
+// Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Media/operation/OGP_DOWNLOAD_MEDIA
 func (c *Client) DownloadMediaFile(ctx context.Context, directory string, filename string, outputDir string) error {
 	reqURL := fmt.Sprintf("/videos/DCIM/%s/%s", directory, filename)
 
@@ -158,6 +165,7 @@ func (c *Client) get(ctx context.Context, path string) (*http.Response, error) {
 	return resp, nil
 }
 
+// Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Query/operation/OGP_GET_DATE_AND_TIME_DST
 func (c *Client) getTimezoneOffset(ctx context.Context) (int, error) {
 	resp, err := c.get(ctx, "/gopro/camera/get_date_time")
 	if err != nil {
