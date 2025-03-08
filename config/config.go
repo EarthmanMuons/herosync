@@ -115,7 +115,7 @@ func validateConfig(cfg *Config) error {
 		return fmt.Errorf("invalid scheme: %s; choose http or https", cfg.GoPro.Scheme)
 	}
 
-	// Try unmarshaling the log level to validate it.
+	// Try unmarshalling the log level to validate it.
 	var level slog.Level
 	if err := level.UnmarshalText([]byte(cfg.Log.Level)); err != nil {
 		return fmt.Errorf("invalid log level: %s", cfg.Log.Level)

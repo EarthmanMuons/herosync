@@ -51,7 +51,7 @@ func (s *SyncService) SyncMedia(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("downloading file: %w", err)
 			}
-			s.logger.Info("File downloaded succesfully", "filename", file.Filename)
+			s.logger.Info("File downloaded successfully", "filename", file.Filename)
 		}
 	}
 
