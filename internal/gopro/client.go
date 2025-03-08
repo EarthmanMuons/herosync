@@ -23,12 +23,14 @@ type Client struct {
 
 // progressWriter wraps an io.Reader to report download progress periodically.
 type progressWriter struct {
-	reader     io.Reader
-	totalSize  int64
-	written    int64
-	logger     *slog.Logger
-	interval   time.Duration
-	lastUpdate time.Time
+	reader       io.Reader
+	totalSize    int64
+	written      int64
+	logger       *slog.Logger
+	interval     time.Duration
+	lastUpdate   time.Time
+	fileName     string
+	bytesWritten int64
 }
 
 func NewClient(baseURL *url.URL, logger *slog.Logger) *Client {
@@ -121,6 +123,7 @@ func (c *Client) DownloadMediaFile(ctx context.Context, directory string, filena
 		logger:     c.logger,
 		interval:   5 * time.Second,
 		lastUpdate: time.Now(),
+		fileName:   filename,
 	}
 
 	_, err = io.Copy(out, progressReader)
@@ -173,14 +176,15 @@ func (c *Client) getTimezoneOffset(ctx context.Context) (int, error) {
 func (pw *progressWriter) Read(p []byte) (int, error) {
 	n, err := pw.reader.Read(p)
 	pw.written += int64(n)
+	pw.bytesWritten += int64(n)
 
 	now := time.Now()
 	if now.Sub(pw.lastUpdate) >= pw.interval {
 		if pw.totalSize > 0 {
 			percent := float64(pw.written) / float64(pw.totalSize) * 100
-			pw.logger.Info("download progress", "filename", filepath.Base(pw.reader.(io.ReadCloser).(*os.File).Name()), "progress", fmt.Sprintf("%.2f%%", percent), "written", pw.written, "total", pw.totalSize)
+			pw.logger.Info("download progress", "filename", pw.fileName, "progress", fmt.Sprintf("%.2f%%", percent), "written", pw.written, "total", pw.totalSize)
 		} else {
-			pw.logger.Info("download progress", "filename", filepath.Base(pw.reader.(io.ReadCloser).(*os.File).Name()), "written", pw.written)
+			pw.logger.Info("download progress", "filename", pw.fileName, "written", pw.written)
 		}
 		pw.lastUpdate = now
 	}

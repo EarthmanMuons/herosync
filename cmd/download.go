@@ -2,12 +2,13 @@ package cmd
 
 import (
 	"fmt"
-	// "path/filepath"
+	"log/slog"
 
 	"github.com/spf13/cobra"
 
 	"github.com/EarthmanMuons/herosync/internal/gopro"
 	"github.com/EarthmanMuons/herosync/internal/logging"
+	"github.com/EarthmanMuons/herosync/internal/media"
 )
 
 type downloadOptions struct {
@@ -43,22 +44,24 @@ func runDownload(cmd *cobra.Command, args []string) error {
 
 	client := gopro.NewClient(baseURL, logging.GetLogger())
 
-	mediaList, err := client.GetMediaList(cmd.Context())
+	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.Output.Dir)
 	if err != nil {
 		return err
 	}
 
-	if len(mediaList.Media) == 0 {
-		fmt.Println("No media files found on GoPro")
-		return nil
-	}
+	// Iterate through the inventory and download files based on status.
+	for _, file := range inventory.Files {
+		if file.Status == media.StatusOnlyGoPro || file.Status == media.StatusDifferent {
+			log.Info("downloading file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
 
-	for _, dir := range mediaList.Media {
-		for _, item := range dir.Items {
-			log.Debug("starting download", "filename", item.Filename, "size", item.Size)
-			if err := client.DownloadMediaFile(cmd.Context(), dir.Directory, item.Filename, cfg.Output.Dir); err != nil {
-				return err
+			if err := client.DownloadMediaFile(cmd.Context(), file.Directory, file.Filename, cfg.Output.Dir); err != nil {
+				// Log the error, but continue to the next file. Don't abort the whole process.
+				log.Error("failed to download file", slog.String("filename", file.Filename), slog.Any("error", err))
+				continue
 			}
+			log.Info("download complete", slog.String("filename", file.Filename))
+		} else {
+			log.Debug("skipping file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
 		}
 	}
 
