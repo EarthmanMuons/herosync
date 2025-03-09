@@ -15,7 +15,7 @@ import (
 var listCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},
-	Short:   "Show media inventory and compare sync status",
+	Short:   "Show media inventory and sync state details",
 	RunE:    runList,
 
 	// only stored on gopro = File exists only on the GoPro

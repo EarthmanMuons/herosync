@@ -11,7 +11,7 @@ import (
 var combineCmd = &cobra.Command{
 	Use:     "combine",
 	Aliases: []string{"merge"},
-	Short:   "Merge video clips into full recordings (by date or chapter)",
+	Short:   "Merge video clips into full recordings",
 	RunE:    runCombine,
 }
 

@@ -13,7 +13,7 @@ import (
 var statusCmd = &cobra.Command{
 	Use:     "status",
 	Aliases: []string{"st"},
-	Short:   "Display GoPro configuration, storage usage, and sync summary",
+	Short:   "Display GoPro hardware and storage info",
 	RunE:    runStatus,
 }
 

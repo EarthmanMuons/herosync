@@ -11,7 +11,7 @@ import (
 var publishCmd = &cobra.Command{
 	Use:     "publish",
 	Aliases: []string{"pub"},
-	Short:   "Upload final videos to YouTube",
+	Short:   "Upload processed videos to YouTube",
 	RunE:    runCombine,
 }
 
