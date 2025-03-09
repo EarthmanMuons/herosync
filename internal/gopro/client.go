@@ -50,11 +50,23 @@ func NewClient(baseURL *url.URL, logger *slog.Logger) *Client {
 
 // Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Query/operation/OGP_GET_STATE
 func (c *Client) GetCameraState(ctx context.Context) (*CameraState, error) {
-	resp, err := c.get(ctx, "/gopro/camera/state")
+	reqURL := c.baseURL.JoinPath("/gopro/camera/state")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := c.doRequest(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("getting camera state: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("getting camera state: unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+	}
 
 	var cameraState CameraState
 	if err := json.NewDecoder(resp.Body).Decode(&cameraState); err != nil {
@@ -66,11 +78,23 @@ func (c *Client) GetCameraState(ctx context.Context) (*CameraState, error) {
 
 // Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Query/operation/OGP_CAMERA_INFO
 func (c *Client) GetHardwareInfo(ctx context.Context) (*HardwareInfo, error) {
-	resp, err := c.get(ctx, "/gopro/camera/info")
+	reqURL := c.baseURL.JoinPath("/gopro/camera/info")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := c.doRequest(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("getting hardware info: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("getting hardware info: unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+	}
 
 	var hwInfo HardwareInfo
 	if err := json.NewDecoder(resp.Body).Decode(&hwInfo); err != nil {
@@ -82,11 +106,23 @@ func (c *Client) GetHardwareInfo(ctx context.Context) (*HardwareInfo, error) {
 
 // Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Media/operation/OGP_MEDIA_LIST
 func (c *Client) GetMediaList(ctx context.Context) (*MediaList, error) {
-	resp, err := c.get(ctx, "/gopro/media/list")
+	reqURL := c.baseURL.JoinPath("/gopro/media/list")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
 	if err != nil {
-		return nil, fmt.Errorf("listing media: %w", err)
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := c.doRequest(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("getting media list: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("getting media list: unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+	}
 
 	var mediaList MediaList
 	if err := json.NewDecoder(resp.Body).Decode(&mediaList); err != nil {
@@ -110,13 +146,24 @@ func (c *Client) GetMediaList(ctx context.Context) (*MediaList, error) {
 
 // Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Media/operation/OGP_DOWNLOAD_MEDIA
 func (c *Client) DownloadMediaFile(ctx context.Context, directory string, filename string, outputDir string) error {
-	reqURL := fmt.Sprintf("/videos/DCIM/%s/%s", directory, filename)
+	relativePath := fmt.Sprintf("/videos/DCIM/%s/%s", directory, filename)
+	reqURL := c.baseURL.JoinPath(relativePath)
 
-	resp, err := c.get(ctx, reqURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := c.doRequest(ctx, req)
 	if err != nil {
 		return fmt.Errorf("downloading media file: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("downloading media file: unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+	}
 
 	// Convert outputDir to an absolute path.
 	absOutputDir, err := filepath.Abs(outputDir)
@@ -160,22 +207,43 @@ func (c *Client) DownloadMediaFile(ctx context.Context, directory string, filena
 	return nil
 }
 
-func (c *Client) get(ctx context.Context, path string) (*http.Response, error) {
-	reqURL := c.baseURL.JoinPath(path)
+// Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Media/operation/OGP_DELETE_SINGLE_FILE
+func (c *Client) DeleteSingleMediaFile(ctx context.Context, path string) error {
+	// Create this manually as a string to prevent URL encoding.
+	fullURL := fmt.Sprintf("%s/gopro/media/delete/file?path=%s", c.baseURL, path)
 
-	req, err := retryablehttp.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
+		return fmt.Errorf("creating request: %w", err)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.doRequest(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("doing request: %w", err)
+		return fmt.Errorf("deleting single media file: %w", err)
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		defer resp.Body.Close()
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("deleting single media file: unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+func (c *Client) doRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
+	// Wrap the *http.Request with retryablehttp.
+	retryableReq, err := retryablehttp.FromRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("creating retryable request: %w", err)
+	}
+
+    // Set the context on the retryable request.
+    retryableReq = retryableReq.WithContext(ctx)
+
+	resp, err := c.httpClient.Do(retryableReq)
+	if err != nil {
+		return nil, fmt.Errorf("doing request: %w", err)
 	}
 
 	return resp, nil
@@ -183,11 +251,23 @@ func (c *Client) get(ctx context.Context, path string) (*http.Response, error) {
 
 // Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Query/operation/OGP_GET_DATE_AND_TIME_DST
 func (c *Client) getTimezoneOffset(ctx context.Context) (int, error) {
-	resp, err := c.get(ctx, "/gopro/camera/get_date_time")
+	reqURL := c.baseURL.JoinPath("/gopro/camera/get_date_time")
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
+	if err != nil {
+		return 0, fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := c.doRequest(ctx, req)
 	if err != nil {
 		return 0, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return 0, fmt.Errorf("getting timezone offset: unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+	}
 
 	var dt cameraDateTime
 	if err := json.NewDecoder(resp.Body).Decode(&dt); err != nil {
