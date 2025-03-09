@@ -48,16 +48,28 @@ func NewClient(baseURL *url.URL, logger *slog.Logger) *Client {
 	}
 }
 
-// Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Query/operation/OGP_GET_STATE
-func (c *Client) GetCameraState(ctx context.Context) (*CameraState, error) {
-	reqURL := c.baseURL.JoinPath("/gopro/camera/state")
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
+// get creates and performs a GET request, handling request creation, retries,
+// and error handling. It takes the FULL URL as a string.
+func (c *Client) get(ctx context.Context, fullURL string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 
-	resp, err := c.doRequest(ctx, req)
+	// Wrap the *http.Request with retryablehttp.
+	retryableReq, err := retryablehttp.FromRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("creating retryable request: %w", err)
+	}
+
+	return c.httpClient.Do(retryableReq)
+}
+
+// Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Query/operation/OGP_GET_STATE
+func (c *Client) GetCameraState(ctx context.Context) (*CameraState, error) {
+	reqURL := c.baseURL.JoinPath("/gopro/camera/state").String()
+
+	resp, err := c.get(ctx, reqURL)
 	if err != nil {
 		return nil, fmt.Errorf("getting camera state: %w", err)
 	}
@@ -78,14 +90,9 @@ func (c *Client) GetCameraState(ctx context.Context) (*CameraState, error) {
 
 // Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Query/operation/OGP_CAMERA_INFO
 func (c *Client) GetHardwareInfo(ctx context.Context) (*HardwareInfo, error) {
-	reqURL := c.baseURL.JoinPath("/gopro/camera/info")
+	reqURL := c.baseURL.JoinPath("/gopro/camera/info").String()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
-	}
-
-	resp, err := c.doRequest(ctx, req)
+	resp, err := c.get(ctx, reqURL)
 	if err != nil {
 		return nil, fmt.Errorf("getting hardware info: %w", err)
 	}
@@ -106,14 +113,9 @@ func (c *Client) GetHardwareInfo(ctx context.Context) (*HardwareInfo, error) {
 
 // Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Media/operation/OGP_MEDIA_LIST
 func (c *Client) GetMediaList(ctx context.Context) (*MediaList, error) {
-	reqURL := c.baseURL.JoinPath("/gopro/media/list")
+	reqURL := c.baseURL.JoinPath("/gopro/media/list").String()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
-	}
-
-	resp, err := c.doRequest(ctx, req)
+	resp, err := c.get(ctx, reqURL)
 	if err != nil {
 		return nil, fmt.Errorf("getting media list: %w", err)
 	}
@@ -147,14 +149,9 @@ func (c *Client) GetMediaList(ctx context.Context) (*MediaList, error) {
 // Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Media/operation/OGP_DOWNLOAD_MEDIA
 func (c *Client) DownloadMediaFile(ctx context.Context, directory string, filename string, outputDir string) error {
 	relativePath := fmt.Sprintf("/videos/DCIM/%s/%s", directory, filename)
-	reqURL := c.baseURL.JoinPath(relativePath)
+	reqURL := c.baseURL.JoinPath(relativePath).String()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
-	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-
-	resp, err := c.doRequest(ctx, req)
+	resp, err := c.get(ctx, reqURL)
 	if err != nil {
 		return fmt.Errorf("downloading media file: %w", err)
 	}
@@ -212,12 +209,7 @@ func (c *Client) DeleteSingleMediaFile(ctx context.Context, path string) error {
 	// Create this manually as a string to prevent URL encoding.
 	fullURL := fmt.Sprintf("%s/gopro/media/delete/file?path=%s", c.baseURL, path)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
-	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
-	}
-
-	resp, err := c.doRequest(ctx, req)
+	resp, err := c.get(ctx, fullURL)
 	if err != nil {
 		return fmt.Errorf("deleting single media file: %w", err)
 	}
@@ -231,34 +223,11 @@ func (c *Client) DeleteSingleMediaFile(ctx context.Context, path string) error {
 	return nil
 }
 
-func (c *Client) doRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
-	// Wrap the *http.Request with retryablehttp.
-	retryableReq, err := retryablehttp.FromRequest(req)
-	if err != nil {
-		return nil, fmt.Errorf("creating retryable request: %w", err)
-	}
-
-    // Set the context on the retryable request.
-    retryableReq = retryableReq.WithContext(ctx)
-
-	resp, err := c.httpClient.Do(retryableReq)
-	if err != nil {
-		return nil, fmt.Errorf("doing request: %w", err)
-	}
-
-	return resp, nil
-}
-
 // Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Query/operation/OGP_GET_DATE_AND_TIME_DST
 func (c *Client) getTimezoneOffset(ctx context.Context) (int, error) {
-	reqURL := c.baseURL.JoinPath("/gopro/camera/get_date_time")
+	reqURL := c.baseURL.JoinPath("/gopro/camera/get_date_time").String()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL.String(), nil)
-	if err != nil {
-		return 0, fmt.Errorf("creating request: %w", err)
-	}
-
-	resp, err := c.doRequest(ctx, req)
+	resp, err := c.get(ctx, reqURL)
 	if err != nil {
 		return 0, err
 	}
@@ -275,6 +244,19 @@ func (c *Client) getTimezoneOffset(ctx context.Context) (int, error) {
 	}
 
 	return dt.TZOffset, nil
+}
+
+// adjustTimestamps converts camera-local timestamps to UTC.
+func adjustTimestamps(mediaList *MediaList, tzOffset int) error {
+	for _, media := range mediaList.Media {
+		for file := range media.Items {
+			originalTime := media.Items[file].CreatedAt
+			adjustedTime := originalTime.Add(-time.Duration(tzOffset) * time.Minute)
+
+			media.Items[file].CreatedAt = adjustedTime
+		}
+	}
+	return nil
 }
 
 func (pw *progressWriter) Read(p []byte) (int, error) {
@@ -296,15 +278,9 @@ func (pw *progressWriter) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// adjustTimestamps converts camera-local timestamps to UTC.
-func adjustTimestamps(mediaList *MediaList, tzOffset int) error {
-	for _, media := range mediaList.Media {
-		for file := range media.Items {
-			originalTime := media.Items[file].CreatedAt
-			adjustedTime := originalTime.Add(-time.Duration(tzOffset) * time.Minute)
-
-			media.Items[file].CreatedAt = adjustedTime
-		}
+func (pw *progressWriter) Close() error {
+	if closer, ok := pw.reader.(io.Closer); ok {
+		return closer.Close()
 	}
 	return nil
 }
