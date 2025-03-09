@@ -97,23 +97,19 @@ func NewMediaInventory(ctx context.Context, goproClient *gopro.Client, outputDir
 			localFileInfo, localFileExists := localFiles[file.Filename]
 
 			status := StatusOnlyGoPro // Default status.
-			var createdAt time.Time
 
 			if localFileExists {
-				createdAt = localFileInfo.ModTime() // Use mtime from local file.
 				if localFileInfo.Size() == file.Size {
 					status = StatusSynced
 				} else {
 					status = StatusDifferent
 				}
-			} else {
-				createdAt = file.CreatedAt // fallback to GoPro's timestamp.
 			}
 
 			mediaFile :=MediaFile{
 				Directory: media.Directory,
 				Filename:  file.Filename,
-				CreatedAt: createdAt, // Use determined createdAt.
+				CreatedAt: file.CreatedAt,
 				Size:      file.Size,
 				Status:    status,
 			}
@@ -140,6 +136,7 @@ func NewMediaInventory(ctx context.Context, goproClient *gopro.Client, outputDir
 // getLocalFiles builds a map of local files (filename -> os.FileInfo).
 func getLocalFiles(dir string) (map[string]os.FileInfo, error) {
 	localFiles := make(map[string]os.FileInfo)
+
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -164,5 +161,6 @@ func getLocalFiles(dir string) (map[string]os.FileInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("walking local directory %s: %w", dir, err)
 	}
+
 	return localFiles, nil
 }
