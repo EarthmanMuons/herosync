@@ -19,6 +19,16 @@ type HardwareInfo struct {
 	FirmwareVersion string `json:"firmware_version"`
 }
 
+// CameraState represents the top-level response from the camera state API.
+type CameraState struct {
+	Status cameraStateStatus `json:"status"`
+}
+
+type cameraStateStatus struct {
+	SDCardCapacity  int64 `json:"117"`
+	SDCardRemaining int64 `json:"54"`
+}
+
 // MediaList represents the top-level response from the media list API.
 type MediaList struct {
 	ID    string       `json:"id"`    // Media list identifier
@@ -46,10 +56,10 @@ type cameraDateTime struct {
 }
 
 func (m *MediaListItem) UnmarshalJSON(data []byte) error {
-	type Alias MediaListItem // Avoid recursion
+	type Alias MediaListItem
 	aux := &struct {
-		CreatedAt string `json:"cre"` // Unmarshal as string
-		Size      string `json:"s"`   // Unmarshal as string
+		CreatedAt string `json:"cre"`
+		Size      string `json:"s"`
 		*Alias
 	}{
 		Alias: (*Alias)(m),
@@ -58,17 +68,40 @@ func (m *MediaListItem) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	// Convert the API's string value into a time.Time for storage.
 	seconds, err := strconv.ParseInt(aux.CreatedAt, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid creation timestamp '%s': %w", aux.CreatedAt, err)
 	}
 	m.CreatedAt = time.Unix(seconds, 0) // Parse as UTC!
 
+	// Convert the API's string value into an int64 for storage.
 	parsedSize, err := strconv.ParseInt(aux.Size, 10, 64)
 	if err != nil {
 		return fmt.Errorf("invalid size string '%s': %w", aux.Size, err)
 	}
 	m.Size = parsedSize
+
+	return nil
+}
+
+func (c *cameraStateStatus) UnmarshalJSON(data []byte) error {
+	type Alias cameraStateStatus
+	aux := &struct {
+		CapacityKB int64 `json:"117"`
+		RemainingKB int64 `json:"54"`
+		*Alias
+	}{
+		Alias: (*Alias)(c),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	// Convert the API's kilobyte values into bytes for storage.
+	const bytesPerKB = 1000
+	c.SDCardCapacity = aux.CapacityKB * bytesPerKB
+	c.SDCardRemaining = aux.RemainingKB * bytesPerKB
 
 	return nil
 }

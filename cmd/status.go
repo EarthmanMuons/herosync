@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
 	"github.com/EarthmanMuons/herosync/internal/gopro"
@@ -33,14 +34,35 @@ func runStatus(cmd *cobra.Command, args []string) error {
 
 	client := gopro.NewClient(baseURL, logging.GetLogger())
 
-	hwInfo, err := client.GetHardwareInfo(cmd.Context())
+	hw, err := client.GetHardwareInfo(cmd.Context())
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("Connected to GoPro %s at %s\n", hwInfo.ModelName, baseURL)
-	fmt.Printf("Serial Number: %s\n", hwInfo.SerialNumber)
-	fmt.Printf("Firmware Version: %s\n", hwInfo.FirmwareVersion)
+	cs, err := client.GetCameraState(cmd.Context())
+	if err != nil {
+		return err
+	}
+	storageStatus := formatStorageStatus(cs.Status.SDCardCapacity, cs.Status.SDCardRemaining)
+
+	fmt.Printf("Connected to GoPro %s at %s\n", hw.ModelName, baseURL)
+	fmt.Printf("Serial Number: %s\n", hw.SerialNumber)
+	fmt.Printf("Firmware Version: %s\n", hw.FirmwareVersion)
+    fmt.Printf("Storage: %s\n", storageStatus)
 
 	return nil
+}
+
+func formatStorageStatus(capacityBytes, remainingBytes int64) string {
+	usedBytes := capacityBytes - remainingBytes
+
+    // Handle division by zero by returning early with capacity = 0.
+    if capacityBytes == 0 {
+		return "0% full (0 B free)"
+	}
+
+	percentageFull := (float64(usedBytes) / float64(capacityBytes)) * 100.0
+	humanRemaining := humanize.Bytes(uint64(remainingBytes))
+
+	return fmt.Sprintf("%.1f%% full (%s free)", percentageFull, humanRemaining)
 }

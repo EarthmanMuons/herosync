@@ -48,6 +48,22 @@ func NewClient(baseURL *url.URL, logger *slog.Logger) *Client {
 	}
 }
 
+// Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Query/operation/OGP_GET_STATE
+func (c *Client) GetCameraState(ctx context.Context) (*CameraState, error) {
+	resp, err := c.get(ctx, "/gopro/camera/state")
+	if err != nil {
+		return nil, fmt.Errorf("getting camera state: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var cameraState CameraState
+	if err := json.NewDecoder(resp.Body).Decode(&cameraState); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+
+	return &cameraState, nil
+}
+
 // Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Query/operation/OGP_CAMERA_INFO
 func (c *Client) GetHardwareInfo(ctx context.Context) (*HardwareInfo, error) {
 	resp, err := c.get(ctx, "/gopro/camera/info")
