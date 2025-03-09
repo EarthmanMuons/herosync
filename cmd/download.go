@@ -30,7 +30,8 @@ var downloadCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(downloadCmd)
+	downloadCmd.Flags().String("gopro-host", "", "GoPro host (hostname:port or IP)")
+	downloadCmd.Flags().String("gopro-scheme", "", "GoPro scheme (http/https)")
 }
 
 func runDownload(cmd *cobra.Command, args []string) error {

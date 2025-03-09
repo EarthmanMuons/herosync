@@ -15,10 +15,6 @@ var combineCmd = &cobra.Command{
 	RunE:    runCombine,
 }
 
-func init() {
-	rootCmd.AddCommand(combineCmd)
-}
-
 func runCombine(cmd *cobra.Command, args []string) error {
 	log := logging.GetLogger()
 

@@ -27,7 +27,6 @@ var listCmd = &cobra.Command{
 func init() {
 	listCmd.Flags().String("gopro-host", "", "GoPro host (hostname:port or IP)")
 	listCmd.Flags().String("gopro-scheme", "", "GoPro scheme (http/https)")
-	rootCmd.AddCommand(listCmd)
 }
 
 func runList(cmd *cobra.Command, args []string) error {

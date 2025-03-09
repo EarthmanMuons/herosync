@@ -15,10 +15,6 @@ var publishCmd = &cobra.Command{
 	RunE:    runCombine,
 }
 
-func init() {
-	rootCmd.AddCommand(publishCmd)
-}
-
 func runPublish(cmd *cobra.Command, args []string) error {
 	log := logging.GetLogger()
 

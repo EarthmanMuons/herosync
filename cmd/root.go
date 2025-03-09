@@ -49,7 +49,17 @@ func Execute() {
 }
 
 func init() {
+	// Commands are added here in a specific order to control their appearance in
+	// the help output.
 	cobra.EnableCommandSorting = false
+	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(listCmd)
+	rootCmd.AddCommand(downloadCmd)
+	rootCmd.AddCommand(combineCmd)
+	rootCmd.AddCommand(publishCmd)
+	rootCmd.AddCommand(cleanupCmd)
+	rootCmd.AddCommand(yoloCmd)
+
 	cobra.OnInitialize(initConfig)
 
 	// Global Flags

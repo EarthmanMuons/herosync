@@ -16,7 +16,8 @@ var yoloCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(yoloCmd)
+	yoloCmd.Flags().String("gopro-host", "", "GoPro host (hostname:port or IP)")
+	yoloCmd.Flags().String("gopro-scheme", "", "GoPro scheme (http/https)")
 }
 
 func runYolo(cmd *cobra.Command, args []string) error {
