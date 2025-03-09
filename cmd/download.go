@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -51,19 +55,37 @@ func runDownload(cmd *cobra.Command, args []string) error {
 
 	// Iterate through the inventory and download files based on status.
 	for _, file := range inventory.Files {
-		if file.Status == media.StatusOnlyGoPro || file.Status == media.StatusDifferent {
+		switch file.Status {
+		case media.StatusOnlyGoPro, media.StatusDifferent:
 			log.Info("downloading file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
 
-			if err := client.DownloadMediaFile(cmd.Context(), file.Directory, file.Filename, cfg.Output.Dir); err != nil {
-				// Log the error, but continue to the next file. Don't abort the whole process.
-				log.Error("failed to download file", slog.String("filename", file.Filename), slog.Any("error", err))
-				continue
+			if err := downloadAndTimestampFile(cmd.Context(), client, &file, cfg.Output.Dir, log); err != nil {
+				continue // Skip to the next file.
 			}
-			log.Info("download complete", slog.String("filename", file.Filename))
-		} else {
+		default:
 			log.Debug("skipping file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
 		}
 	}
+
+	return nil
+}
+
+// downloadAndTimestampFile handles downloading and timestamping a single file.
+func downloadAndTimestampFile(ctx context.Context, client *gopro.Client, file *media.MediaFile, outputDir string, log *slog.Logger) error {
+	downloadPath := filepath.Join(outputDir, file.Filename)
+
+	if err := client.DownloadMediaFile(ctx, file.Directory, file.Filename, outputDir); err != nil {
+		log.Error("failed to download file", slog.String("filename", file.Filename), slog.Any("error", err))
+		return err
+	}
+	log.Info("download complete", slog.String("filename", file.Filename))
+
+	// Set the file's modification time (mtime) to match the video's creation timestamp.
+	if err := os.Chtimes(downloadPath, time.Now(), file.CreatedAt); err != nil {
+		log.Error("failed to set file mtime", slog.String("filename", file.Filename), slog.Time("mtime", file.CreatedAt), slog.Any("error", err))
+		return err
+	}
+	log.Info("mtime updated", slog.String("filename", file.Filename))
 
 	return nil
 }

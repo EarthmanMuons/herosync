@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/EarthmanMuons/herosync/internal/fsutil"
 	"github.com/EarthmanMuons/herosync/internal/gopro"
 )
 
@@ -30,7 +29,7 @@ func (fs FileStatus) String() string {
 	case StatusOnlyLocal:
 		return "only stored on local"
 	case StatusSynced:
-		return "file has been synced"
+		return "file already in sync"
 	case StatusDifferent:
 		return "SIZES ARE MISMATCHED"
 	case StatusError:
@@ -95,23 +94,26 @@ func NewMediaInventory(ctx context.Context, goproClient *gopro.Client, outputDir
 	// Add files from GoPro.
 	for _, media := range mediaList.Media {
 		for _, file := range media.Items {
-			localFilePath := filepath.Join(absOutputDir, file.Filename)
-			localSize, localFileExists := localFiles[file.Filename]
+			localFileInfo, localFileExists := localFiles[file.Filename]
 
-			status := StatusOnlyGoPro // Default status
+			status := StatusOnlyGoPro // Default status.
+			var createdAt time.Time
 
 			if localFileExists {
-				if localSize == file.Size && fsutil.FileExistsAndMatchesSize(localFilePath, file.Size) {
+				createdAt = localFileInfo.ModTime() // Use mtime from local file.
+				if localFileInfo.Size() == file.Size {
 					status = StatusSynced
 				} else {
 					status = StatusDifferent
 				}
+			} else {
+				createdAt = file.CreatedAt // fallback to GoPro's timestamp.
 			}
 
-			mediaFile := MediaFile{
+			mediaFile :=MediaFile{
 				Directory: media.Directory,
 				Filename:  file.Filename,
-				CreatedAt: file.CreatedAt,
+				CreatedAt: createdAt, // Use determined createdAt.
 				Size:      file.Size,
 				Status:    status,
 			}
@@ -120,13 +122,13 @@ func NewMediaInventory(ctx context.Context, goproClient *gopro.Client, outputDir
 		}
 	}
 
-	// Add any remaining local files.
-	for localFileName, localFileSize := range localFiles {
+	// Add any remaining local files (files that exist only locally).
+	for localFileName, localFileInfo := range localFiles {
 		mediaFile := MediaFile{
-			Directory: absOutputDir, // Assume no subdirectory
+			Directory: absOutputDir, // Assume no subdirectory.
 			Filename:  localFileName,
-			CreatedAt: time.Time{},
-			Size:      localFileSize,
+			CreatedAt: localFileInfo.ModTime(), // Use mtime from local file.
+			Size:      localFileInfo.Size(),
 			Status:    StatusOnlyLocal,
 		}
 		inventory.Files = append(inventory.Files, mediaFile)
@@ -135,16 +137,14 @@ func NewMediaInventory(ctx context.Context, goproClient *gopro.Client, outputDir
 	return inventory, nil
 }
 
-// getLocalFiles builds a map of local files (filename -> size).
-func getLocalFiles(dir string) (map[string]int64, error) {
-	localFiles := make(map[string]int64)
+// getLocalFiles builds a map of local files (filename -> os.FileInfo).
+func getLocalFiles(dir string) (map[string]os.FileInfo, error) {
+	localFiles := make(map[string]os.FileInfo)
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
-				// Dir does not exist handling.
 				return nil
 			}
-			// Return any other error that may arise
 			return err
 		}
 
@@ -153,16 +153,16 @@ func getLocalFiles(dir string) (map[string]int64, error) {
 			if err != nil {
 				return err
 			}
-			rel, err := filepath.Rel(dir, path) // Use relative
+			rel, err := filepath.Rel(dir, path)
 			if err != nil {
-				return fmt.Errorf("finding relative path of, %v, to output path, %v: %w", path, dir, err)
+				return fmt.Errorf("finding relative path of, %v, to output path, %v: %w",path, dir, err)
 			}
-			localFiles[rel] = info.Size()
+			localFiles[rel] = info
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("walking local directory %s: %w", dir, err) // Wrap to give context.
+		return nil, fmt.Errorf("walking local directory %s: %w", dir, err)
 	}
 	return localFiles, nil
 }
