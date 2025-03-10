@@ -235,7 +235,7 @@ func (mi *MediaInventory) GetUniqueDates() []time.Time {
 // GetMediaIds returns a sorted list of unique Media IDs from the MediaInventory.
 func (mi *MediaInventory) GetMediaIDs() []int {
 	keys := make(map[int]bool)
-	ids := []int{}
+	var ids []int
 
 	for _, file := range mi.Files {
 		fileInfo := gopro.ParseFilename(file.Filename)

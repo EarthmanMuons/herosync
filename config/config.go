@@ -24,6 +24,9 @@ type Config struct {
 		Host   string `koanf:"host"`
 		Scheme string `koanf:"scheme"`
 	} `koanf:"gopro"`
+	Group struct {
+		By string `koanf:"by"`
+	} `koanf:"group"`
 	Log struct {
 		Level string `koanf:"level"`
 	} `koanf:"log"`
@@ -70,6 +73,7 @@ func loadDefaults() error {
 	defaults := map[string]any{
 		"gopro.host":   "", // Empty means use mDNS discovery
 		"gopro.scheme": "http",
+		"group.by":     "media-id",
 		"log.level":    "info",
 		"output.dir":   DefaultOutputDir(),
 	}
@@ -113,6 +117,13 @@ func validateConfig(cfg *Config) error {
 		// valid
 	default:
 		return fmt.Errorf("invalid scheme: %s; choose http or https", cfg.GoPro.Scheme)
+	}
+
+	switch cfg.Group.By {
+	case "media-id", "date":
+		// valid
+	default:
+		return fmt.Errorf("invalid group: %s; choose media-id or date", cfg.GoPro.Scheme)
 	}
 
 	// Try unmarshalling the log level to validate it.

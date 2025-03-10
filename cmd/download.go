@@ -86,7 +86,7 @@ func downloadAndTimestampFile(ctx context.Context, client *gopro.Client, file *m
 		log.Error("failed to set file mtime", slog.String("filename", file.Filename), slog.Time("mtime", file.CreatedAt), slog.Any("error", err))
 		return err
 	}
-	log.Info("mtime updated", slog.String("filename", file.Filename))
+	log.Debug("mtime updated", slog.String("filename", file.Filename))
 
 	return nil
 }

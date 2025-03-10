@@ -30,6 +30,8 @@ func init() {
 }
 
 func runList(cmd *cobra.Command, args []string) error {
+	// log := logging.GetLogger()
+	 
 	cfg, err := getConfigWithFlags(cmd)
 	if err != nil {
 		return err
