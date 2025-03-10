@@ -9,6 +9,47 @@ combine chapters into complete videos, clean up storage, and optionally publish
 to YouTube. Designed for hands-free operation via cron jobs or interactive use
 with detailed status reporting.
 
+## Usage
+
+```
+Usage:
+  herosync [command]
+
+Available Commands:
+  status      Display GoPro hardware and storage info
+  list        Show media inventory and sync state details
+  download    Fetch new media files from the GoPro
+  combine     Merge video clips into full recordings
+  publish     Upload processed videos to YouTube
+  cleanup     Delete transferred media from GoPro storage
+  yolo        Hands-free: download, combine, publish, cleanup
+  help        Help about any command
+
+Flags:
+      --config-file string    configuration file path
+                              [env: HEROSYNC_CONFIG_FILE]
+                              [default: ~/Library/Application Support/herosync/config.toml]
+
+      --gopro-host string     GoPro URL host (IP, hostname:port, "" for mDNS discovery)
+                              [env: HEROSYNC_GOPRO_HOST]
+                              [default: ""]
+
+      --gopro-scheme string   GoPro URL scheme (http, https)
+                              [env: HEROSYNC_GOPRO_SCHEME]
+                              [default: http]
+
+  -h, --help                  help for herosync
+  -l, --log-level string      logging level (debug, info, warn, error)
+                              [env: HEROSYNC_LOG_LEVEL]
+                              [default: info]
+
+  -o, --output-dir string     output directory path
+                              [env: HEROSYNC_OUTPUT_DIR]
+                              [default: ~/Library/Application Support/herosync/media/]
+
+Use "herosync [command] --help" for more information about a command.
+```
+
 ## Caveats
 
 `herosync` was designed specifically for my niche use case and will likely **not
