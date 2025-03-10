@@ -10,6 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/EarthmanMuons/herosync/config"
+	"github.com/EarthmanMuons/herosync/internal/fsutil"
 	"github.com/EarthmanMuons/herosync/internal/gopro"
 	"github.com/EarthmanMuons/herosync/internal/logging"
 	"github.com/EarthmanMuons/herosync/internal/media"
@@ -53,7 +55,7 @@ func runCombine(cmd *cobra.Command, args []string) error {
 			filtered := inventory.FilterByMediaID(mediaID)
 			log.Debug("combining files", "media-id", mediaID)
 
-			if err := combineFiles(cmd.Context(), filtered, cfg.Output.Dir); err != nil {
+			if err := combineFiles(cmd.Context(), filtered, cfg); err != nil {
 				fmt.Errorf("combining by media ID %d: %v", mediaID, err)
 			}
 		}
@@ -63,7 +65,7 @@ func runCombine(cmd *cobra.Command, args []string) error {
 			filtered := inventory.FilterByDate(date)
 			log.Debug("combining files", "date", date.Format("20060102"))
 
-			if err := combineFiles(cmd.Context(), filtered, cfg.Output.Dir); err != nil {
+			if err := combineFiles(cmd.Context(), filtered, cfg); err != nil {
 				fmt.Errorf("combining by date %s: %v", date.Format("20060102"), err)
 			}
 		}
@@ -74,7 +76,7 @@ func runCombine(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func combineFiles(ctx context.Context, inv *media.MediaInventory, outputDir string) error {
+func combineFiles(ctx context.Context, inv *media.MediaInventory, cfg *config.Config) error {
 	log := logging.GetLogger()
 
 	if len(inv.Files) == 0 {
@@ -89,8 +91,10 @@ func combineFiles(ctx context.Context, inv *media.MediaInventory, outputDir stri
 
 	// Build the list of input files for FFmpeg.
 	var inputFiles []string
+	fmt.Println("Combining files:")
 	for _, file := range inv.Files {
-		inputFiles = append(inputFiles, fmt.Sprintf("file '%s/%s'", outputDir, file.Filename))
+		fmt.Printf("  %s\n", file.Filename)
+		inputFiles = append(inputFiles, fmt.Sprintf("file '%s/%s'", cfg.Output.Dir, file.Filename))
 	}
 
 	// Create a temporary file for the file list.
@@ -114,6 +118,10 @@ func combineFiles(ctx context.Context, inv *media.MediaInventory, outputDir stri
 		outputFilename = fmt.Sprintf("%s_%s", dateString, outputFilename)
 	}
 
+	fmt.Println("Output file:")
+	outputFilePath := fmt.Sprintf("%s/%s", fsutil.ShortenPath(cfg.Output.Dir), outputFilename)
+	fmt.Printf("  %s\n", outputFilePath)
+
 	// Execute FFmpeg to concatenate the files.
 	cmd := exec.CommandContext(
 		ctx,
@@ -122,15 +130,25 @@ func combineFiles(ctx context.Context, inv *media.MediaInventory, outputDir stri
 		"-safe", "0",
 		"-i", tmpFile.Name(),
 		"-c", "copy",
-		fmt.Sprintf("%s/%s.MP4", outputDir, outputFilename),
+		fmt.Sprintf("%s/%s.MP4", cfg.Output.Dir, outputFilename),
 	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+
+	var stdErrBuff strings.Builder
+
+	// Only show FFmpeg output if log level is "debug" or higher
+	if cfg.Log.Level == "debug" {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	} else {
+		cmd.Stderr = &stdErrBuff
+	}
 
 	if err := cmd.Run(); err != nil {
+		if cfg.Log.Level != "debug" {
+			log.Error(stdErrBuff.String())
+		}
 		return fmt.Errorf("running ffmpeg: %w", err)
 	}
 
-	fmt.Printf("Combined into: %s/%s.MP4\n", outputDir, outputFilename)
 	return nil
 }
