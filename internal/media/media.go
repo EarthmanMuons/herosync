@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/EarthmanMuons/herosync/internal/gopro"
@@ -106,7 +107,7 @@ func NewMediaInventory(ctx context.Context, goproClient *gopro.Client, outputDir
 				}
 			}
 
-			mediaFile :=MediaFile{
+			mediaFile := MediaFile{
 				Directory: media.Directory,
 				Filename:  file.Filename,
 				CreatedAt: file.CreatedAt,
@@ -152,7 +153,7 @@ func getLocalFiles(dir string) (map[string]os.FileInfo, error) {
 			}
 			rel, err := filepath.Rel(dir, path)
 			if err != nil {
-				return fmt.Errorf("finding relative path of, %v, to output path, %v: %w",path, dir, err)
+				return fmt.Errorf("finding relative path of, %v, to output path, %v: %w", path, dir, err)
 			}
 			localFiles[rel] = info
 		}
@@ -163,4 +164,86 @@ func getLocalFiles(dir string) (map[string]os.FileInfo, error) {
 	}
 
 	return localFiles, nil
+}
+
+// AllFilesLocal checks if all files in the inventory are either StatusSynced or StatusOnlyLocal.
+func (mi *MediaInventory) AllFilesLocal() bool {
+	for _, file := range mi.Files {
+		if file.Status != StatusSynced && file.Status != StatusOnlyLocal {
+			return false
+		}
+	}
+	return true
+}
+
+// FilterByDate returns a new MediaInventory containing only files created on the specified date.
+func (mi *MediaInventory) FilterByDate(date time.Time) *MediaInventory {
+	filtered := &MediaInventory{}
+
+	for _, file := range mi.Files {
+		// Compare year, month, and day.
+		y1, m1, d1 := file.CreatedAt.Date()
+		y2, m2, d2 := date.Date()
+		if y1 == y2 && m1 == m2 && d1 == d2 {
+			filtered.Files = append(filtered.Files, file)
+		}
+	}
+	return filtered
+}
+
+// FilterByMediaID returns a new MediaInventory containing only files with the specified Media ID.
+func (mi *MediaInventory) FilterByMediaID(mediaID int) *MediaInventory {
+	filtered := &MediaInventory{}
+	var chapters []MediaFile
+
+	for _, file := range mi.Files {
+		fileInfo := gopro.ParseFilename(file.Filename)
+		if fileInfo.IsValid && fileInfo.MediaID == mediaID {
+			chapters = append(chapters, file)
+		}
+	}
+
+	// Sort by chapter to ensure correct concatenation order.
+	slices.SortFunc(chapters, func(a, b MediaFile) int {
+		fileInfoA := gopro.ParseFilename(a.Filename)
+		fileInfoB := gopro.ParseFilename(b.Filename)
+		return fileInfoA.Chapter - fileInfoB.Chapter // Compare the integer value of both chapters.
+	})
+	filtered.Files = append(filtered.Files, chapters...)
+
+	return filtered
+}
+
+// GetUniqueDates returns a sorted list of unique dates from the MediaInventory.
+func (mi *MediaInventory) GetUniqueDates() []time.Time {
+	dateMap := make(map[time.Time]bool)
+	var dates []time.Time
+
+	for _, file := range mi.Files {
+		date := time.Date(file.CreatedAt.Year(), file.CreatedAt.Month(), file.CreatedAt.Day(), 0, 0, 0, 0, file.CreatedAt.Location())
+		if _, ok := dateMap[date]; !ok {
+			dateMap[date] = true
+			dates = append(dates, date)
+		}
+	}
+	slices.SortFunc(dates, func(a, b time.Time) int {
+		return a.Compare(b)
+	})
+	return dates
+}
+
+// GetMediaIds returns a sorted list of unique Media IDs from the MediaInventory.
+func (mi *MediaInventory) GetMediaIDs() []int {
+	keys := make(map[int]bool)
+	ids := []int{}
+
+	for _, file := range mi.Files {
+		fileInfo := gopro.ParseFilename(file.Filename)
+		if _, ok := keys[fileInfo.MediaID]; !ok {
+			keys[fileInfo.MediaID] = true
+			ids = append(ids, fileInfo.MediaID)
+		}
+	}
+	slices.Sort(ids)
+	return ids
 }
