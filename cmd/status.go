@@ -17,11 +17,6 @@ var statusCmd = &cobra.Command{
 	RunE:    runStatus,
 }
 
-func init() {
-	statusCmd.Flags().String("gopro-host", "", "GoPro host (hostname:port or IP)")
-	statusCmd.Flags().String("gopro-scheme", "", "GoPro scheme (http/https)")
-}
-
 func runStatus(cmd *cobra.Command, args []string) error {
 	cfg, err := getConfigWithFlags(cmd)
 	if err != nil {
