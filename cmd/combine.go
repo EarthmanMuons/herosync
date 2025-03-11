@@ -44,14 +44,14 @@ func runCombine(cmd *cobra.Command, args []string) error {
 
 	client := gopro.NewClient(baseURL, logging.GetLogger())
 
-	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.RawMediaDir())
+	inventory, err := media.NewInventory(cmd.Context(), client, cfg.RawMediaDir())
 	if err != nil {
 		return err
 	}
 
 	switch cfg.Group.By {
 	case "media-id":
-		mediaIDs := inventory.GetMediaIDs()
+		mediaIDs := inventory.MediaIDs()
 		for _, mediaID := range mediaIDs {
 			filtered := inventory.FilterByMediaID(mediaID)
 			log.Debug("combining files", "media-id", mediaID)
@@ -61,7 +61,7 @@ func runCombine(cmd *cobra.Command, args []string) error {
 			}
 		}
 	case "date":
-		dates := inventory.GetUniqueDates()
+		dates := inventory.UniqueDates()
 		for _, date := range dates {
 			filtered := inventory.FilterByDate(date)
 			log.Debug("combining files", "date", date.Format(time.DateOnly))
@@ -77,7 +77,7 @@ func runCombine(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func combineFiles(ctx context.Context, cfg *config.Config, inv *media.MediaInventory) error {
+func combineFiles(ctx context.Context, cfg *config.Config, inv *media.Inventory) error {
 	log := logging.GetLogger()
 
 	if len(inv.Files) == 0 {
@@ -85,7 +85,7 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.MediaInven
 		return nil
 	}
 
-	if !inv.AllFilesLocal() {
+	if inv.HasUnsyncedFiles() {
 		log.Warn("skipping combination; not all group files are local")
 		return nil
 	}
@@ -140,7 +140,7 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.MediaInven
 	return nil
 }
 
-func determineOutputFilename(cfg *config.Config, inv *media.MediaInventory) (string, error) {
+func determineOutputFilename(cfg *config.Config, inv *media.Inventory) (string, error) {
 	switch cfg.Group.By {
 	case "media-id":
 		firstFile := gopro.ParseFilename(inv.Files[0].Filename)

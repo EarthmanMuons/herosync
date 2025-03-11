@@ -52,7 +52,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 
 	client := gopro.NewClient(baseURL, logging.GetLogger())
 
-	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.RawMediaDir())
+	inventory, err := media.NewInventory(cmd.Context(), client, cfg.RawMediaDir())
 	if err != nil {
 		return err
 	}
@@ -72,14 +72,14 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	for _, file := range inventory.Files {
 		skipDownload := true
 
-		if file.Status == media.StatusOnlyGoPro {
+		if file.Status == media.OnlyRemote {
 			skipDownload = false
 			log.Info("downloading file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
 		}
 
 		if downloadOpts.force {
 			switch file.Status {
-			case media.StatusDifferent, media.StatusSynced:
+			case media.OutOfSync, media.InSync:
 				skipDownload = false
 				log.Info("force downloading file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
 			}
@@ -99,7 +99,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 }
 
 // downloadFile handles downloading a single file and preserving its timestamp.
-func downloadFile(ctx context.Context, client *gopro.Client, file *media.MediaFile, outputDir string, log *slog.Logger) error {
+func downloadFile(ctx context.Context, client *gopro.Client, file *media.File, outputDir string, log *slog.Logger) error {
 	downloadPath := filepath.Join(outputDir, file.Filename)
 
 	if err := client.DownloadMediaFile(ctx, file.Directory, file.Filename, outputDir); err != nil {

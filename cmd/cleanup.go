@@ -64,7 +64,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 
 	client := gopro.NewClient(baseURL, logging.GetLogger())
 
-	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.RawMediaDir())
+	inventory, err := media.NewInventory(cmd.Context(), client, cfg.RawMediaDir())
 	if err != nil {
 		return err
 	}
@@ -92,13 +92,13 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		goproPath := fmt.Sprintf("%s/%s", file.Directory, file.Filename)
 
 		// Only delete synced files unless explicit --remote flag was provided.
-		if !cleanupOpts.remote && file.Status != media.StatusSynced {
-			if file.Status == media.StatusOnlyGoPro {
+		if !cleanupOpts.remote && file.Status != media.InSync {
+			if file.Status == media.OnlyRemote {
 				log.Debug("skipping unsynced file deletion", slog.String("path", goproPath))
 			}
-		} else if !cleanupOpts.remote && cleanupOpts.local && file.Status == media.StatusSynced {
+		} else if !cleanupOpts.remote && cleanupOpts.local && file.Status == media.InSync {
 			log.Debug("skipping to prioritize local deletion", slog.String("path", goproPath))
-		} else if file.Status != media.StatusOnlyLocal {
+		} else if file.Status != media.OnlyLocal {
 			log.Info("deleting GoPro file", slog.String("path", goproPath))
 
 			if err := client.DeleteSingleMediaFile(cmd.Context(), goproPath); err != nil {
@@ -107,7 +107,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		}
 
 		// *** Local Deletion
-		if cleanupOpts.local && file.Status != media.StatusOnlyGoPro {
+		if cleanupOpts.local && file.Status != media.OnlyRemote {
 			localPath := filepath.Join(cfg.RawMediaDir(), file.Filename)
 			log.Info("deleting local file", slog.String("path", localPath))
 
