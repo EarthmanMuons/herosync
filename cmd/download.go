@@ -15,13 +15,6 @@ import (
 	"github.com/EarthmanMuons/herosync/internal/media"
 )
 
-type downloadOptions struct {
-	force  bool
-	dryRun bool
-}
-
-var downloadOpts downloadOptions
-
 var downloadCmd = &cobra.Command{
 	Use:     "download",
 	Aliases: []string{"dl"},
