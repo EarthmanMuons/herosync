@@ -42,14 +42,14 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	baseURL, err := cfg.GetGoProURL()
+	baseURL, err := cfg.GoProURL()
 	if err != nil {
 		return fmt.Errorf("failed to resolve GoPro connection: %v", err)
 	}
 
 	client := gopro.NewClient(baseURL, logging.GetLogger())
 
-	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.Output.Dir)
+	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.SourceDir())
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		case media.StatusOnlyGoPro, media.StatusDifferent:
 			log.Info("downloading file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
 
-			if err := downloadAndTimestampFile(cmd.Context(), client, &file, cfg.Output.Dir, log); err != nil {
+			if err := downloadFile(cmd.Context(), client, &file, cfg.SourceDir(), log); err != nil {
 				continue // Skip to the next file.
 			}
 		default:
@@ -71,8 +71,8 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// downloadAndTimestampFile handles downloading and timestamping a single file.
-func downloadAndTimestampFile(ctx context.Context, client *gopro.Client, file *media.MediaFile, outputDir string, log *slog.Logger) error {
+// downloadFile handles downloading a single file and preserving its timestamp.
+func downloadFile(ctx context.Context, client *gopro.Client, file *media.MediaFile, outputDir string, log *slog.Logger) error {
 	downloadPath := filepath.Join(outputDir, file.Filename)
 
 	if err := client.DownloadMediaFile(ctx, file.Directory, file.Filename, outputDir); err != nil {

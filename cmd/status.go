@@ -28,7 +28,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	baseURL, err := cfg.GetGoProURL()
+	baseURL, err := cfg.GoProURL()
 	if err != nil {
 		return fmt.Errorf("failed to resolve GoPro connection: %v", err)
 	}
@@ -49,7 +49,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Connected to GoPro %s at %s\n", hw.ModelName, baseURL)
 	fmt.Printf("Serial Number: %s\n", hw.SerialNumber)
 	fmt.Printf("Firmware Version: %s\n", hw.FirmwareVersion)
-    fmt.Printf("Storage: %s\n", storageStatus)
+	fmt.Printf("Storage: %s\n", storageStatus)
 
 	return nil
 }
@@ -57,8 +57,8 @@ func runStatus(cmd *cobra.Command, args []string) error {
 func formatStorageStatus(capacityBytes, remainingBytes int64) string {
 	usedBytes := capacityBytes - remainingBytes
 
-    // Handle division by zero by returning early with capacity = 0.
-    if capacityBytes == 0 {
+	// Handle division by zero by returning early with capacity = 0.
+	if capacityBytes == 0 {
 		return "0% full (0 B free)"
 	}
 

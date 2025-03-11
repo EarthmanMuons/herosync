@@ -20,7 +20,7 @@ import (
 var combineCmd = &cobra.Command{
 	Use:     "combine",
 	Aliases: []string{"merge"},
-	Short:   "Merge video clips into full recordings",
+	Short:   "Merge source clips into final recordings",
 	RunE:    runCombine,
 }
 
@@ -36,14 +36,14 @@ func runCombine(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	baseURL, err := cfg.GetGoProURL()
+	baseURL, err := cfg.GoProURL()
 	if err != nil {
 		return fmt.Errorf("failed to resolve GoPro connection: %v", err)
 	}
 
 	client := gopro.NewClient(baseURL, logging.GetLogger())
 
-	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.Output.Dir)
+	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.SourceDir())
 	if err != nil {
 		return err
 	}
@@ -89,12 +89,16 @@ func combineFiles(ctx context.Context, inv *media.MediaInventory, cfg *config.Co
 		return nil
 	}
 
+	if err := os.MkdirAll(cfg.FinalDir(), 0o750); err != nil {
+		return fmt.Errorf("creating directory: %w", err)
+	}
+
 	// Build the list of input files for FFmpeg.
 	var inputFiles []string
 	fmt.Println("Combining files:")
 	for _, file := range inv.Files {
 		fmt.Printf("  %s\n", file.Filename)
-		inputFiles = append(inputFiles, fmt.Sprintf("file '%s/%s'", cfg.Output.Dir, file.Filename))
+		inputFiles = append(inputFiles, fmt.Sprintf("file '%s/%s'", cfg.SourceDir(), file.Filename))
 	}
 
 	// Create a temporary file for the file list.
@@ -119,8 +123,8 @@ func combineFiles(ctx context.Context, inv *media.MediaInventory, cfg *config.Co
 	}
 
 	fmt.Println("Output file:")
-	outputFilePath := fmt.Sprintf("%s/%s", fsutil.ShortenPath(cfg.Output.Dir), outputFilename)
-	fmt.Printf("  %s\n", outputFilePath)
+	outputFilePath := fmt.Sprintf("%s/%s", cfg.FinalDir(), outputFilename)
+	fmt.Printf("  %s\n", fsutil.ShortenPath(outputFilePath))
 
 	// Execute FFmpeg to concatenate the files.
 	cmd := exec.CommandContext(
@@ -130,7 +134,7 @@ func combineFiles(ctx context.Context, inv *media.MediaInventory, cfg *config.Co
 		"-safe", "0",
 		"-i", tmpFile.Name(),
 		"-c", "copy",
-		fmt.Sprintf("%s/%s.MP4", cfg.Output.Dir, outputFilename),
+		fmt.Sprintf("%s/%s.mp4", cfg.FinalDir(), outputFilename),
 	)
 
 	var stdErrBuff strings.Builder

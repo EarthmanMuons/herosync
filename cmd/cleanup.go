@@ -31,14 +31,14 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	baseURL, err := cfg.GetGoProURL()
+	baseURL, err := cfg.GoProURL()
 	if err != nil {
 		return fmt.Errorf("failed to resolve GoPro connection: %v", err)
 	}
 
 	client := gopro.NewClient(baseURL, logging.GetLogger())
 
-	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.Output.Dir)
+	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.SourceDir())
 	if err != nil {
 		return err
 	}

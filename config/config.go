@@ -135,6 +135,16 @@ func validateConfig(cfg *Config) error {
 	return nil
 }
 
-func (c *Config) GetGoProURL() (*url.URL, error) {
+func (c *Config) GoProURL() (*url.URL, error) {
 	return resolveGoPro(c.GoPro.Host, c.GoPro.Scheme)
+}
+
+// SourceDir returns the full path to the media source directory.
+func (c *Config) SourceDir() string {
+	return filepath.Join(c.Output.Dir, "source")
+}
+
+// FinalDir returns the full path to the final media directory.
+func (c *Config) FinalDir() string {
+	return filepath.Join(c.Output.Dir, "final")
 }
