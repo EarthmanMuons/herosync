@@ -16,15 +16,25 @@ import (
 )
 
 var downloadCmd = &cobra.Command{
-	Use:     "download",
+	Use:     "download [FILENAME]...",
 	Aliases: []string{"dl"},
 	Short:   "Fetch new media files from the GoPro",
-	RunE:    runDownload,
+	Long: `Fetch new media files from the GoPro
+
+If one or more [FILENAME] arguments are provided, only matching files will be
+affected.`,
+	Args: cobra.ArbitraryArgs,
+	RunE: runDownload,
 }
 
+type downloadOptions struct {
+	force bool
+}
+
+var downloadOpts downloadOptions
+
 func init() {
-	downloadCmd.Flags().String("gopro-host", "", "GoPro host (hostname:port or IP)")
-	downloadCmd.Flags().String("gopro-scheme", "", "GoPro scheme (http/https)")
+	downloadCmd.Flags().BoolVarP(&downloadOpts.force, "force", "f", false, "force re-download of existing file")
 }
 
 func runDownload(cmd *cobra.Command, args []string) error {
@@ -47,17 +57,36 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Apply filename filtering if any were provided.
+	if len(args) > 0 {
+		log.Debug("filtering by filename", slog.Any("args", args))
+		inventory = inventory.FilterByFilename(args)
+	}
+
 	// Iterate through the inventory and download files based on status.
 	for _, file := range inventory.Files {
-		switch file.Status {
-		case media.StatusOnlyGoPro, media.StatusDifferent:
-			log.Info("downloading file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
+		skipDownload := true
 
-			if err := downloadFile(cmd.Context(), client, &file, cfg.RawMediaDir(), log); err != nil {
-				continue // Skip to the next file.
+		if file.Status == media.StatusOnlyGoPro {
+			skipDownload = false
+			log.Info("downloading file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
+		}
+
+		if downloadOpts.force {
+			switch file.Status {
+			case media.StatusDifferent, media.StatusSynced:
+				skipDownload = false
+				log.Info("force downloading file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
 			}
-		default:
+		}
+
+		if skipDownload {
 			log.Debug("skipping file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
+			continue
+		}
+
+		if err := downloadFile(cmd.Context(), client, &file, cfg.RawMediaDir(), log); err != nil {
+			log.Error("failed to download", slog.String("filename", file.Filename), slog.Any("error", err))
 		}
 	}
 

@@ -71,7 +71,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 
 	// Apply filename filtering if any were provided.
 	if len(args) > 0 {
-		log.Debug("filtering by filenames", slog.Any("args", args))
+		log.Debug("filtering by filename", slog.Any("args", args))
 		inventory = inventory.FilterByFilename(args)
 	}
 
