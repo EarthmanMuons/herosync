@@ -191,9 +191,9 @@ func (mi *MediaInventory) FilterByDate(date time.Time) *MediaInventory {
 	return filtered
 }
 
-// FilterByFilenames returns a new MediaInventory containing only files whose
+// FilterByFilename returns a new MediaInventory containing only files whose
 // filenames are present in the provided filenames slice.
-func (mi *MediaInventory) FilterByFilenames(filenames []string) *MediaInventory {
+func (mi *MediaInventory) FilterByFilename(filenames []string) *MediaInventory {
 	filtered := &MediaInventory{}
 
 	if len(filenames) == 0 {

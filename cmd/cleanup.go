@@ -22,11 +22,14 @@ var cleanupCmd = &cobra.Command{
 By default, only files that have been successfully transferred to local storage
 ("already in sync") will be deleted from the GoPro.
 
-If the --force flag is used, local files will also be deleted.
+USE FLAGS WITH CAUTION!
 
-USE WITH CAUTION! This means *all* files on the GoPro and *all* videos in the
-"raw" output subdirectory on the local machine will be removed. The "processed"
-output subdirectory will remain untouched.
+* --remote deletes all GoPro files regardless of sync status.
+* --local deletes all local files in the "raw" output subdirectory.
+
+Combining --remote and --local will delete everything from both GoPro storage
+and local raw storage. The "processed" output subdirectory will remain
+untouched.
 
 If one or more [FILENAME] arguments are provided, only matching files will be
 affected.`,
@@ -35,13 +38,15 @@ affected.`,
 }
 
 type cleanupOptions struct {
-	force bool
+	remote bool
+	local  bool
 }
 
 var cleanupOpts cleanupOptions
 
 func init() {
-	cleanupCmd.Flags().BoolVarP(&cleanupOpts.force, "force", "f", false, "delete local files too (UNSAFE)")
+	cleanupCmd.Flags().BoolVar(&cleanupOpts.remote, "remote", false, "delete all files from GoPro storage")
+	cleanupCmd.Flags().BoolVar(&cleanupOpts.local, "local", false, "delete all files from local storage")
 }
 
 func runCleanup(cmd *cobra.Command, args []string) error {
@@ -64,35 +69,46 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Filenames were specified, so filter the inventory.
+	// Apply filename filtering if any were provided.
 	if len(args) > 0 {
-		log.Debug("cleaning up specific files", slog.Any("filenames", args))
-		inventory = inventory.FilterByFilenames(args)
+		log.Debug("filtering by filenames", slog.Any("args", args))
+		inventory = inventory.FilterByFilename(args)
 	}
 
-	// Only remove synced files unless explicitly forced.
-	if !cleanupOpts.force {
-		log.Debug("limit cleanup to synced files")
-		inventory = inventory.FilterByStatus(media.StatusSynced)
-	}
-
-	// No eligible files left in the inventory after filtering.
+	// Early exit if there are no files to delete.
 	if len(inventory.Files) == 0 {
-		log.Warn("no eligible files to clean up")
+		log.Warn("no files were eligible for clean up")
 		return nil
 	}
+
+	// Flags Used         | Deletes Synced GoPro Files | Deletes Unsynced GoPro Files | Deletes Local Raw Files
+	// ------------------ | -------------------------- | ---------------------------- | -----------------------
+	// (default)          | Yes                        | No                           | No
+	// --remote           | Yes                        | Yes                          | No
+	// --local            | No                         | No                           | Yes
+	// --remote --local   | Yes                        | Yes                          | Yes
 
 	for _, file := range inventory.Files {
 		// *** GoPro Deletion
 		goproPath := fmt.Sprintf("%s/%s", file.Directory, file.Filename)
-		log.Info("deleting file from GoPro", slog.String("path", goproPath))
 
-		if err := client.DeleteSingleMediaFile(cmd.Context(), goproPath); err != nil {
-			log.Error("failed to delete file", slog.String("path", goproPath), slog.Any("error", err))
+		// Only delete synced files unless explicit --remote flag was provided.
+		if !cleanupOpts.remote && file.Status != media.StatusSynced {
+			if file.Status == media.StatusOnlyGoPro {
+				log.Debug("skipping unsynced file deletion", slog.String("path", goproPath))
+			}
+		} else if !cleanupOpts.remote && cleanupOpts.local && file.Status == media.StatusSynced {
+			log.Debug("skipping to prioritize local deletion", slog.String("path", goproPath))
+		} else if file.Status != media.StatusOnlyLocal {
+			log.Info("deleting GoPro file", slog.String("path", goproPath))
+
+			if err := client.DeleteSingleMediaFile(cmd.Context(), goproPath); err != nil {
+				log.Error("failed to delete file", slog.String("path", goproPath), slog.Any("error", err))
+			}
 		}
 
 		// *** Local Deletion
-		if cleanupOpts.force {
+		if cleanupOpts.local && file.Status != media.StatusOnlyGoPro {
 			localPath := filepath.Join(cfg.RawMediaDir(), file.Filename)
 			log.Info("deleting local file", slog.String("path", localPath))
 
