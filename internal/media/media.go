@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/EarthmanMuons/herosync/internal/gopro"
@@ -192,7 +193,8 @@ func (mi *MediaInventory) FilterByDate(date time.Time) *MediaInventory {
 }
 
 // FilterByFilename returns a new MediaInventory containing only files whose
-// filenames are present in the provided filenames slice.
+// filenames match (case-insensitive, partial match) any of the strings in
+// the provided filenames slice.
 func (mi *MediaInventory) FilterByFilename(filenames []string) *MediaInventory {
 	filtered := &MediaInventory{}
 
@@ -200,14 +202,12 @@ func (mi *MediaInventory) FilterByFilename(filenames []string) *MediaInventory {
 		return mi
 	}
 
-	filenameSet := make(map[string]bool)
-	for _, filename := range filenames {
-		filenameSet[filename] = true
-	}
-
 	for _, file := range mi.Files {
-		if _, ok := filenameSet[file.Filename]; ok {
-			filtered.Files = append(filtered.Files, file)
+		for _, filter := range filenames {
+			if strings.Contains(strings.ToLower(file.Filename), strings.ToLower(filter)) {
+				filtered.Files = append(filtered.Files, file)
+				break // Avoid adding the same file multiple times.
+			}
 		}
 	}
 
