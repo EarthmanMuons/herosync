@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -128,6 +129,13 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.MediaInven
 	if err := executeFFmpeg(ctx, cfg, fileList, outputFilePath); err != nil {
 		return err
 	}
+
+	// Set the file's modification time (mtime) to match the first video's creation timestamp.
+	if err := os.Chtimes(outputFilePath, time.Now(), inv.Files[0].CreatedAt); err != nil {
+		log.Error("failed to set file mtime", slog.String("filename", outputFilename), slog.Time("mtime", inv.Files[0].CreatedAt), slog.Any("error", err))
+		return err
+	}
+	log.Debug("mtime updated", slog.String("filename", outputFilename))
 
 	return nil
 }
