@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -55,7 +55,7 @@ func runCombine(cmd *cobra.Command, args []string) error {
 			filtered := inventory.FilterByMediaID(mediaID)
 			log.Debug("combining files", "media-id", mediaID)
 
-			if err := combineFiles(cmd.Context(), filtered, cfg); err != nil {
+			if err := combineFiles(cmd.Context(), cfg, filtered); err != nil {
 				fmt.Errorf("combining by media ID %d: %v", mediaID, err)
 			}
 		}
@@ -63,20 +63,20 @@ func runCombine(cmd *cobra.Command, args []string) error {
 		dates := inventory.GetUniqueDates()
 		for _, date := range dates {
 			filtered := inventory.FilterByDate(date)
-			log.Debug("combining files", "date", date.Format("20060102"))
+			log.Debug("combining files", "date", date.Format(time.DateOnly))
 
-			if err := combineFiles(cmd.Context(), filtered, cfg); err != nil {
-				fmt.Errorf("combining by date %s: %v", date.Format("20060102"), err)
+			if err := combineFiles(cmd.Context(), cfg, filtered); err != nil {
+				fmt.Errorf("combining by date %s: %v", date.Format(time.DateOnly), err)
 			}
 		}
 	default:
-		panic(fmt.Sprintf("unreachable: invalid group-by option: %s", cfg.Group.By))
+		return fmt.Errorf("invalid group-by option: %s", cfg.Group.By)
 	}
 
 	return nil
 }
 
-func combineFiles(ctx context.Context, inv *media.MediaInventory, cfg *config.Config) error {
+func combineFiles(ctx context.Context, cfg *config.Config, inv *media.MediaInventory) error {
 	log := logging.GetLogger()
 
 	if len(inv.Files) == 0 {
@@ -113,13 +113,10 @@ func combineFiles(ctx context.Context, inv *media.MediaInventory, cfg *config.Co
 		return fmt.Errorf("writing to temp file: %w", err)
 	}
 
-	firstFile := gopro.ParseFilename(inv.Files[0].Filename)
-	outputFilename := strconv.Itoa(firstFile.MediaID)
-	var dateString string
-	// Prefix filename if the filter includes more than one filename
-	if len(inv.Files) > 1 {
-		dateString = inv.Files[0].CreatedAt.Format("20060102")
-		outputFilename = fmt.Sprintf("%s_%s", dateString, outputFilename)
+	// Determine the output filename.
+	outputFilename, err := determineOutputFilename(cfg, inv)
+	if err != nil {
+		return err // Error already includes context
 	}
 
 	fmt.Println("Output file:")
@@ -127,14 +124,37 @@ func combineFiles(ctx context.Context, inv *media.MediaInventory, cfg *config.Co
 	fmt.Printf("  %s\n", fsutil.ShortenPath(outputFilePath))
 
 	// Execute FFmpeg to concatenate the files.
+	fileList := tmpFile.Name()
+	if err := executeFFmpeg(ctx, cfg, fileList, outputFilePath); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func determineOutputFilename(cfg *config.Config, inv *media.MediaInventory) (string, error) {
+	switch cfg.Group.By {
+	case "media-id":
+		firstFile := gopro.ParseFilename(inv.Files[0].Filename)
+		return fmt.Sprintf("gopro-%04d.mp4", firstFile.MediaID), nil
+	case "date":
+		return fmt.Sprintf("daily-%s.mp4", inv.Files[0].CreatedAt.Format(time.DateOnly)), nil
+	default:
+		return "", fmt.Errorf("invalid group-by option: %s", cfg.Group.By)
+	}
+}
+
+func executeFFmpeg(ctx context.Context, cfg *config.Config, inputFileList, outputFilePath string) error {
+	log := logging.GetLogger()
+
 	cmd := exec.CommandContext(
 		ctx,
 		"ffmpeg",
 		"-f", "concat",
 		"-safe", "0",
-		"-i", tmpFile.Name(),
+		"-i", inputFileList,
 		"-c", "copy",
-		fmt.Sprintf("%s/%s.mp4", cfg.FinalDir(), outputFilename),
+		outputFilePath,
 	)
 
 	var stdErrBuff strings.Builder
