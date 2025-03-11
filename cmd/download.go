@@ -29,12 +29,14 @@ affected.`,
 
 type downloadOptions struct {
 	force bool
+	keep  bool
 }
 
 var downloadOpts downloadOptions
 
 func init() {
-	downloadCmd.Flags().BoolVarP(&downloadOpts.force, "force", "f", false, "force re-download of existing file")
+	downloadCmd.Flags().BoolVarP(&downloadOpts.force, "force", "f", false, "force re-download of existing files")
+	downloadCmd.Flags().BoolVarP(&downloadOpts.keep, "keep-originals", "k", false, "prevent cleaning remote files after download")
 }
 
 func runDownload(cmd *cobra.Command, args []string) error {
@@ -92,6 +94,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 
 		if err := downloadFile(cmd.Context(), client, &file, cfg.RawMediaDir(), log); err != nil {
 			log.Error("failed to download", slog.String("filename", file.Filename), slog.Any("error", err))
+			// Don't return here, attempt to download other files.
 		}
 	}
 
@@ -114,6 +117,32 @@ func downloadFile(ctx context.Context, client *gopro.Client, file *media.File, o
 		return err
 	}
 	log.Debug("mtime updated", slog.String("filename", file.Filename))
+
+	// Verify the file size.
+	fileInfo, err := os.Stat(downloadPath)
+	if err != nil {
+		log.Error("failed to stat downloaded file", slog.String("path", downloadPath), slog.Any("error", err))
+		return err
+	}
+
+	if fileInfo.Size() != file.Size {
+		log.Error("downloaded file size mismatch",
+			slog.String("filename", file.Filename),
+			slog.Int64("actual", fileInfo.Size()),
+			slog.Int64("expected", file.Size),
+		)
+		return fmt.Errorf("file size mismatch: got %d, expected %d", fileInfo.Size(), file.Size)
+	}
+
+	// Delete the remote file if --keep-originals is not specified.
+	if !downloadOpts.keep {
+		goproPath := fmt.Sprintf("%s/%s", file.Directory, file.Filename)
+		if err := client.DeleteSingleMediaFile(ctx, goproPath); err != nil {
+			log.Error("failed to delete remote file", slog.String("path", goproPath), slog.Any("error", err))
+			return err
+		}
+		log.Debug("remote file deleted", slog.String("filename", file.Filename))
+	}
 
 	return nil
 }

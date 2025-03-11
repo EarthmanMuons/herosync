@@ -27,6 +27,7 @@ var combineCmd = &cobra.Command{
 
 func init() {
 	combineCmd.Flags().String("group-by", "", "group videos by (media-id, date)")
+	// combineCmd.Flags().BoolVarP(&combineOpts.keep, "keep-originals", "k", false, "prevent deletion of raw files after combining")
 }
 
 func runCombine(cmd *cobra.Command, args []string) error {

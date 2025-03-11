@@ -80,12 +80,12 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Flags Used         | Deletes Synced GoPro Files | Deletes Unsynced GoPro Files | Deletes Local Raw Files
-	// ------------------ | -------------------------- | ---------------------------- | -----------------------
-	// (default)          | Yes                        | No                           | No
-	// --remote           | Yes                        | Yes                          | No
-	// --local            | No                         | No                           | Yes
-	// --remote --local   | Yes                        | Yes                          | Yes
+	// Flags Used       | Deletes InSync GoPro Files | Deletes Other GoPro Files | Deletes Local Raw Files
+	// ---------------- | -------------------------- | ------------------------- | -----------------------
+	// (default)        | Yes                        | No                        | No
+	// --remote         | Yes                        | Yes                       | No
+	// --local          | No                         | No                        | Yes
+	// --remote --local | Yes                        | Yes                       | Yes
 
 	for _, file := range inventory.Files {
 		// *** GoPro Deletion
@@ -99,10 +99,10 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		} else if !cleanupOpts.remote && cleanupOpts.local && file.Status == media.InSync {
 			log.Debug("skipping to prioritize local deletion", slog.String("path", goproPath))
 		} else if file.Status != media.OnlyLocal {
-			log.Info("deleting GoPro file", slog.String("path", goproPath))
+			log.Info("deleting remote file", slog.String("path", goproPath))
 
 			if err := client.DeleteSingleMediaFile(cmd.Context(), goproPath); err != nil {
-				log.Error("failed to delete file", slog.String("path", goproPath), slog.Any("error", err))
+				log.Error("failed to delete remote file", slog.String("path", goproPath), slog.Any("error", err))
 			}
 		}
 
@@ -115,7 +115,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 				if os.IsNotExist(err) {
 					log.Warn("local file does not exist", "path", localPath)
 				} else {
-					log.Error("failed to delete file", slog.String("path", localPath), slog.Any("error", err))
+					log.Error("failed to delete local file", slog.String("path", localPath), slog.Any("error", err))
 				}
 			}
 		}
