@@ -15,6 +15,7 @@ var cleanupCmd = &cobra.Command{
 	Use:     "cleanup",
 	Aliases: []string{"clean"},
 	Short:   "Delete transferred media from GoPro storage",
+	Args:    cobra.ArbitraryArgs,
 	RunE:    runCleanup,
 }
 
@@ -43,19 +44,34 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	if len(args) > 0 {
+		// Filenames were provided. Filter by filename.
+		log.Debug("cleaning up specific files", slog.Any("filenames", args))
+		inventory = inventory.FilterByFilenames(args)
+	} else {
+		// No filenames provided. Filter by StatusSynced.
+		log.Debug("cleaning up all synced files")
+		inventory = inventory.FilterByStatus(media.StatusSynced)
+	}
+
+	if len(inventory.Files) == 0 {
+		if len(args) > 0 {
+			log.Warn("no files found for input arguments", "files", args)
+		} else {
+			log.Warn("no files eligible to clean up")
+		}
+		return nil
+	}
+
 	for _, file := range inventory.Files {
-		switch file.Status {
-		case media.StatusSynced:
-			path := fmt.Sprintf("%s/%s", file.Directory, file.Filename)
+		path := fmt.Sprintf("%s/%s", file.Directory, file.Filename)
 
-			log.Info("deleting file", slog.String("filename", file.Filename))
-			fmt.Printf("Deleting synced file from GoPro: %s\n", file.Filename)
+		log.Info("deleting file", slog.String("filename", file.Filename))
+		fmt.Printf("Deleting file from GoPro: %s\n", file.Filename)
 
-			if err := client.DeleteSingleMediaFile(cmd.Context(), path); err != nil {
-				return fmt.Errorf("running cleanup command: %w", err)
-			}
-		default:
-			log.Debug("skipping file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
+		if err := client.DeleteSingleMediaFile(cmd.Context(), path); err != nil {
+			log.Error("failed to delete file", slog.String("filename", file.Filename), slog.Any("error", err))
+			fmt.Printf("Error deleting file %s: %v\n", file.Filename, err)
 		}
 	}
 

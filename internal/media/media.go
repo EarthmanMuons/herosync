@@ -191,6 +191,29 @@ func (mi *MediaInventory) FilterByDate(date time.Time) *MediaInventory {
 	return filtered
 }
 
+// FilterByFilenames returns a new MediaInventory containing only files whose
+// filenames are present in the provided filenames slice.
+func (mi *MediaInventory) FilterByFilenames(filenames []string) *MediaInventory {
+	filtered := &MediaInventory{}
+
+	if len(filenames) == 0 {
+		return mi
+	}
+
+	filenameSet := make(map[string]bool)
+	for _, filename := range filenames {
+		filenameSet[filename] = true
+	}
+
+	for _, file := range mi.Files {
+		if _, ok := filenameSet[file.Filename]; ok {
+			filtered.Files = append(filtered.Files, file)
+		}
+	}
+
+	return filtered
+}
+
 // FilterByMediaID returns a new MediaInventory containing only files with the specified Media ID.
 func (mi *MediaInventory) FilterByMediaID(mediaID int) *MediaInventory {
 	filtered := &MediaInventory{}
@@ -210,6 +233,24 @@ func (mi *MediaInventory) FilterByMediaID(mediaID int) *MediaInventory {
 		return fileInfoA.Chapter - fileInfoB.Chapter // Compare the integer value of both chapters.
 	})
 	filtered.Files = append(filtered.Files, chapters...)
+
+	return filtered
+}
+
+// FilterByStatus returns a new MediaInventory containing only files that have
+// one of the specified statuses.
+func (mi *MediaInventory) FilterByStatus(statuses ...FileStatus) *MediaInventory {
+	filtered := &MediaInventory{}
+
+	if len(statuses) == 0 {
+		return mi // Return the original if no statuses are provided
+	}
+
+	for _, file := range mi.Files {
+		if slices.Contains(statuses, file.Status) {
+			filtered.Files = append(filtered.Files, file)
+		}
+	}
 
 	return filtered
 }
