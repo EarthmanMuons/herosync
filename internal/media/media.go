@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -131,6 +132,11 @@ func NewMediaInventory(ctx context.Context, goproClient *gopro.Client, outputDir
 		}
 		inventory.Files = append(inventory.Files, mediaFile)
 	}
+
+	// Sort the inventory by file creation time.
+	sort.Slice(inventory.Files, func(i, j int) bool {
+		return inventory.Files[i].CreatedAt.Before(inventory.Files[j].CreatedAt)
+	})
 
 	return inventory, nil
 }
