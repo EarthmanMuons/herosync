@@ -139,12 +139,12 @@ func (c *Config) GoProURL() (*url.URL, error) {
 	return resolveGoPro(c.GoPro.Host, c.GoPro.Scheme)
 }
 
-// SourceDir returns the full path to the media source directory.
-func (c *Config) SourceDir() string {
+// RawMediaDir returns the full path to the raw media directory.
+func (c *Config) RawMediaDir() string {
 	return filepath.Join(c.Output.Dir, "source")
 }
 
-// FinalDir returns the full path to the final media directory.
-func (c *Config) FinalDir() string {
-	return filepath.Join(c.Output.Dir, "final")
+// ProcessedMediaDir returns the full path to the processed media directory.
+func (c *Config) ProcessedMediaDir() string {
+	return filepath.Join(c.Output.Dir, "processed")
 }

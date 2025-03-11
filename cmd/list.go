@@ -44,7 +44,7 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	client := gopro.NewClient(baseURL, logging.GetLogger())
 
-	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.SourceDir())
+	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.RawMediaDir())
 	if err != nil {
 		return err
 	}

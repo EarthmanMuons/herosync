@@ -44,7 +44,7 @@ func runCombine(cmd *cobra.Command, args []string) error {
 
 	client := gopro.NewClient(baseURL, logging.GetLogger())
 
-	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.SourceDir())
+	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.RawMediaDir())
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.MediaInven
 		return nil
 	}
 
-	if err := os.MkdirAll(cfg.FinalDir(), 0o750); err != nil {
+	if err := os.MkdirAll(cfg.ProcessedMediaDir(), 0o750); err != nil {
 		return fmt.Errorf("creating directory: %w", err)
 	}
 
@@ -99,7 +99,7 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.MediaInven
 	fmt.Println("Combining files:")
 	for _, file := range inv.Files {
 		fmt.Printf("  %s\n", file.Filename)
-		inputFiles = append(inputFiles, fmt.Sprintf("file '%s/%s'", cfg.SourceDir(), file.Filename))
+		inputFiles = append(inputFiles, fmt.Sprintf("file '%s/%s'", cfg.RawMediaDir(), file.Filename))
 	}
 
 	// Create a temporary file for the file list.
@@ -121,7 +121,7 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.MediaInven
 	}
 
 	fmt.Println("Output file:")
-	outputFilePath := fmt.Sprintf("%s/%s", cfg.FinalDir(), outputFilename)
+	outputFilePath := fmt.Sprintf("%s/%s", cfg.ProcessedMediaDir(), outputFilename)
 	fmt.Printf("  %s\n", fsutil.ShortenPath(outputFilePath))
 
 	// Execute FFmpeg to concatenate the files.

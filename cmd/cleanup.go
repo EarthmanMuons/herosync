@@ -59,7 +59,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 
 	client := gopro.NewClient(baseURL, logging.GetLogger())
 
-	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.SourceDir())
+	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.RawMediaDir())
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 
 		// *** Local Deletion
 		if cleanupOpts.force {
-			localPath := filepath.Join(cfg.SourceDir(), file.Filename)
+			localPath := filepath.Join(cfg.RawMediaDir(), file.Filename)
 			log.Info("deleting local file", slog.String("path", localPath))
 
 			if err := os.Remove(localPath); err != nil {
