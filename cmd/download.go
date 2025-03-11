@@ -61,6 +61,11 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		log.Debug("filtering by filename", slog.Any("args", args))
 		inventory = inventory.FilterByFilename(args)
+
+		if len(inventory.Files) == 0 {
+			log.Error("no matching files", slog.Any("args", args))
+			os.Exit(1)
+		}
 	}
 
 	// Iterate through the inventory and download files based on status.

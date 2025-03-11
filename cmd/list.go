@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
+	"os"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -13,9 +15,10 @@ import (
 )
 
 var listCmd = &cobra.Command{
-	Use:     "list",
+	Use:     "list [FILENAME]...",
 	Aliases: []string{"ls"},
 	Short:   "Show media inventory and sync state details",
+	Args:    cobra.ArbitraryArgs,
 	RunE:    runList,
 
 	// only stored on gopro = File exists only on the GoPro
@@ -24,13 +27,8 @@ var listCmd = &cobra.Command{
 	// SIZES ARE MISMATCHED = File exists on both, but sizes differ
 }
 
-func init() {
-	listCmd.Flags().String("gopro-host", "", "GoPro host (hostname:port or IP)")
-	listCmd.Flags().String("gopro-scheme", "", "GoPro scheme (http/https)")
-}
-
 func runList(cmd *cobra.Command, args []string) error {
-	// log := logging.GetLogger()
+	log := logging.GetLogger()
 
 	cfg, err := getConfigWithFlags(cmd)
 	if err != nil {
@@ -47,6 +45,17 @@ func runList(cmd *cobra.Command, args []string) error {
 	inventory, err := media.NewMediaInventory(cmd.Context(), client, cfg.RawMediaDir())
 	if err != nil {
 		return err
+	}
+
+	// Apply filename filtering if any were provided.
+	if len(args) > 0 {
+		log.Debug("filtering by filename", slog.Any("args", args))
+		inventory = inventory.FilterByFilename(args)
+
+		if len(inventory.Files) == 0 {
+			log.Error("no matching files", slog.Any("args", args))
+			os.Exit(1)
+		}
 	}
 
 	for _, file := range inventory.Files {

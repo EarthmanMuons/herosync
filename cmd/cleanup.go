@@ -73,12 +73,11 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 	if len(args) > 0 {
 		log.Debug("filtering by filename", slog.Any("args", args))
 		inventory = inventory.FilterByFilename(args)
-	}
 
-	// Early exit if there are no files to delete.
-	if len(inventory.Files) == 0 {
-		log.Warn("no files were eligible for clean up")
-		return nil
+		if len(inventory.Files) == 0 {
+			log.Error("no matching files", slog.Any("args", args))
+			os.Exit(1)
+		}
 	}
 
 	// Flags Used         | Deletes Synced GoPro Files | Deletes Unsynced GoPro Files | Deletes Local Raw Files
