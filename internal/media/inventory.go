@@ -247,6 +247,15 @@ func (inv *Inventory) FilterByStatus(statuses ...Status) *Inventory {
 	return filtered
 }
 
+// TotalSize returns the sum total size (in bytes) of all of the files in the Inventory.
+func (inv *Inventory) TotalSize() int64 {
+	var totalSize int64
+	for _, file := range inv.Files {
+		totalSize += file.Size
+	}
+	return totalSize
+}
+
 // HasUnsyncedFiles checks if the inventory has files that need downloading.
 func (inv *Inventory) HasUnsyncedFiles() bool {
 	for _, file := range inv.Files {

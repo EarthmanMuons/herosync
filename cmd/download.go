@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/EarthmanMuons/herosync/internal/fsutil"
 	"github.com/EarthmanMuons/herosync/internal/gopro"
 	"github.com/EarthmanMuons/herosync/internal/logging"
 	"github.com/EarthmanMuons/herosync/internal/media"
@@ -119,19 +120,8 @@ func downloadFile(ctx context.Context, client *gopro.Client, file *media.File, o
 	log.Debug("mtime updated", slog.String("filename", file.Filename))
 
 	// Verify the file size.
-	fileInfo, err := os.Stat(downloadPath)
-	if err != nil {
-		log.Error("failed to stat downloaded file", slog.String("path", downloadPath), slog.Any("error", err))
+	if err := fsutil.VerifySizeExact(downloadPath, file.Size); err != nil {
 		return err
-	}
-
-	if fileInfo.Size() != file.Size {
-		log.Error("downloaded file size mismatch",
-			slog.String("filename", file.Filename),
-			slog.Int64("actual", fileInfo.Size()),
-			slog.Int64("expected", file.Size),
-		)
-		return fmt.Errorf("file size mismatch: got %d, expected %d", fileInfo.Size(), file.Size)
 	}
 
 	// Delete the original remote file if --keep-originals is not set.

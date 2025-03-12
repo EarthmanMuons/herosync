@@ -125,8 +125,8 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.Inventory)
 	}
 	log.Debug("mtime updated", slog.String("path", outputFilePath), slog.Time("timestamp", inv.Files[0].CreatedAt))
 
-	// Verify the file size (with tolerance).
-	if err := verifyCombinedFileSize(outputFilePath, totalSize); err != nil {
+	// Verify the file size (within 1% tolerance).
+	if err := fsutil.VerifySize(outputFilePath, totalSize, 0.01); err != nil {
 		return err
 	}
 
@@ -246,28 +246,5 @@ func executeFFmpeg(ctx context.Context, cfg *config.Config, inputFileList, outpu
 		return fmt.Errorf("running ffmpeg: %w", err)
 	}
 
-	return nil
-}
-
-// verifyCombinedFileSize checks the size of the combined file against the expected size (with tolerance).
-func verifyCombinedFileSize(outputFilePath string, totalInputSize int64) error {
-	log := logging.GetLogger()
-
-	fileInfo, err := os.Stat(outputFilePath)
-	if err != nil {
-		log.Error("failed to stat combined file", slog.String("filename", filepath.Base(outputFilePath)), slog.Any("error", err))
-		return err
-	}
-
-	// Allow for 1% size increase.
-	allowedMaxSize := float64(totalInputSize) * 1.01
-	if float64(fileInfo.Size()) > allowedMaxSize {
-		log.Error("combined file size exceeds allowed limit",
-			slog.String("filename", filepath.Base(outputFilePath)),
-			slog.Int64("expected_max_size", int64(allowedMaxSize)),
-			slog.Int64("actual_size", fileInfo.Size()),
-		)
-		return fmt.Errorf("combined file size for %s exceeds allowed limit: got %d, expected max %d", filepath.Base(outputFilePath), fileInfo.Size(), int64(allowedMaxSize))
-	}
 	return nil
 }
