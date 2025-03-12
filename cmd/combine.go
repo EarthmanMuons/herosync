@@ -103,66 +103,31 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.Inventory)
 	}
 
 	// Build the list of input files for FFmpeg.
-	var inputFiles []string
-	var totalSize int64
-	fmt.Println("Combining files:")
-	for _, file := range inv.Files {
-		fmt.Printf("  %s\n", file.Filename)
-		inputFiles = append(inputFiles, fmt.Sprintf("file '%s/%s'", cfg.RawMediaDir(), file.Filename))
-		totalSize += file.Size
-	}
-
-	// Create a temporary file for the file list.
-	tmpFile, err := os.CreateTemp("", "filelist*.txt")
-	if err != nil {
-		return fmt.Errorf("creating temp file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-	defer tmpFile.Close()
-
-	if _, err := tmpFile.WriteString(strings.Join(inputFiles, "\n")); err != nil {
-		return fmt.Errorf("writing to temp file: %w", err)
-	}
-
-	// Determine the output filename.
-	outputFilename, err := determineOutputFilename(cfg, inv)
+	inputFiles, totalSize, err := prepareFiles(cfg, inv)
 	if err != nil {
 		return err
 	}
 
-	fmt.Println("Output file:")
-	outputFilePath := fmt.Sprintf("%s/%s", cfg.ProcessedMediaDir(), outputFilename)
-	fmt.Printf("  %s\n", fsutil.ShortenPath(outputFilePath))
+	outputFilePath, err := determineOutputFilePath(cfg, inv)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Output file: %s\n", fsutil.ShortenPath(outputFilePath))
 
-	// Execute FFmpeg to concatenate the files.
-	fileList := tmpFile.Name()
-	if err := executeFFmpeg(ctx, cfg, fileList, outputFilePath); err != nil {
+	if err := executeFFmpegWithFileList(ctx, cfg, inputFiles, outputFilePath); err != nil {
 		return err
 	}
 
 	// Set the file's modification time (mtime) to match the first video's creation timestamp.
 	if err := os.Chtimes(outputFilePath, time.Now(), inv.Files[0].CreatedAt); err != nil {
-		log.Error("failed to set file mtime", slog.String("filename", outputFilename), slog.Time("mtime", inv.Files[0].CreatedAt), slog.Any("error", err))
+		log.Error("failed to set file mtime", slog.String("path", outputFilePath), slog.Time("mtime", inv.Files[0].CreatedAt), slog.Any("error", err))
 		return err
 	}
-	log.Debug("mtime updated", slog.String("filename", outputFilename))
+	log.Debug("mtime updated", slog.String("path", outputFilePath), slog.Time("timestamp", inv.Files[0].CreatedAt))
 
 	// Verify the file size (with tolerance).
-	fileInfo, err := os.Stat(outputFilePath)
-	if err != nil {
-		log.Error("failed to stat combined file", slog.String("path", outputFilePath), slog.Any("error", err))
+	if err := verifyCombinedFileSize(outputFilePath, totalSize); err != nil {
 		return err
-	}
-
-	// Allow for 1% size increase.
-	allowedMaxSize := float64(totalSize) * 1.01
-	if float64(fileInfo.Size()) > allowedMaxSize {
-		log.Error("combined file size exceeds allowed limit",
-			slog.String("filename", outputFilename),
-			slog.Int64("actual", fileInfo.Size()),
-			slog.Int64("expected_max", int64(allowedMaxSize)),
-		)
-		return fmt.Errorf("combined file size for %s exceeds allowed limit: got %d, expected max %d", outputFilename, fileInfo.Size(), int64(allowedMaxSize))
 	}
 
 	// Delete the original files if --keep-originals is not set.
@@ -180,6 +145,49 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.Inventory)
 	return nil
 }
 
+// prepareFiles builds the list of input files for FFmpeg and calculates total size.
+func prepareFiles(cfg *config.Config, inv *media.Inventory) ([]string, int64, error) {
+	var inputFiles []string
+	fmt.Println("Combining files:")
+	var totalSize int64
+	for _, file := range inv.Files {
+		fmt.Printf("  %s\n", file.Filename)
+		inputFiles = append(inputFiles, fmt.Sprintf("file '%s/%s'", cfg.RawMediaDir(), file.Filename))
+		totalSize += file.Size
+	}
+	return inputFiles, totalSize, nil
+}
+
+// determineOutputFilePath determines and creates output file path, handling existing files.
+func determineOutputFilePath(cfg *config.Config, inv *media.Inventory) (string, error) {
+	outputFilename, err := determineOutputFilename(cfg, inv)
+	if err != nil {
+		return "", err
+	}
+
+	base := outputFilename
+	ext := filepath.Ext(outputFilename)
+	if ext != "" {
+		base = outputFilename[:len(outputFilename)-len(ext)]
+	}
+	counter := 1
+	outputFilePath := filepath.Join(cfg.ProcessedMediaDir(), outputFilename)
+
+	for {
+		_, err := os.Stat(outputFilePath)
+		if os.IsNotExist(err) {
+			break
+		}
+		if err != nil {
+			return "", fmt.Errorf("checking output file existence: %w", err)
+		}
+		outputFilename = fmt.Sprintf("%s_%d%s", base, counter, ext)
+		outputFilePath = filepath.Join(cfg.ProcessedMediaDir(), outputFilename)
+		counter++
+	}
+	return outputFilePath, nil
+}
+
 func determineOutputFilename(cfg *config.Config, inv *media.Inventory) (string, error) {
 	switch cfg.Group.By {
 	case "media-id":
@@ -190,6 +198,22 @@ func determineOutputFilename(cfg *config.Config, inv *media.Inventory) (string, 
 	default:
 		return "", fmt.Errorf("invalid group-by option: %s", cfg.Group.By)
 	}
+}
+
+// executeFFmpegWithFileList creates a temp file list, and executes ffmpeg.
+func executeFFmpegWithFileList(ctx context.Context, cfg *config.Config, inputFiles []string, outputFilePath string) error {
+	tmpFile, err := os.CreateTemp("", "filelist*.txt")
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	defer tmpFile.Close()
+
+	if _, err := tmpFile.WriteString(strings.Join(inputFiles, "\n")); err != nil {
+		return fmt.Errorf("writing to temp file: %w", err)
+	}
+
+	return executeFFmpeg(ctx, cfg, tmpFile.Name(), outputFilePath)
 }
 
 func executeFFmpeg(ctx context.Context, cfg *config.Config, inputFileList, outputFilePath string) error {
@@ -222,5 +246,28 @@ func executeFFmpeg(ctx context.Context, cfg *config.Config, inputFileList, outpu
 		return fmt.Errorf("running ffmpeg: %w", err)
 	}
 
+	return nil
+}
+
+// verifyCombinedFileSize checks the size of the combined file against the expected size (with tolerance).
+func verifyCombinedFileSize(outputFilePath string, totalInputSize int64) error {
+	log := logging.GetLogger()
+
+	fileInfo, err := os.Stat(outputFilePath)
+	if err != nil {
+		log.Error("failed to stat combined file", slog.String("filename", filepath.Base(outputFilePath)), slog.Any("error", err))
+		return err
+	}
+
+	// Allow for 1% size increase.
+	allowedMaxSize := float64(totalInputSize) * 1.01
+	if float64(fileInfo.Size()) > allowedMaxSize {
+		log.Error("combined file size exceeds allowed limit",
+			slog.String("filename", filepath.Base(outputFilePath)),
+			slog.Int64("expected_max_size", int64(allowedMaxSize)),
+			slog.Int64("actual_size", fileInfo.Size()),
+		)
+		return fmt.Errorf("combined file size for %s exceeds allowed limit: got %d, expected max %d", filepath.Base(outputFilePath), fileInfo.Size(), int64(allowedMaxSize))
+	}
 	return nil
 }
