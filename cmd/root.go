@@ -14,48 +14,21 @@ import (
 	"github.com/EarthmanMuons/herosync/internal/fsutil"
 )
 
-type rootOptions struct {
-	configFile string
-	logLevel   string
-}
-
-var rootOpts rootOptions
-
-var rootCmd = &cobra.Command{
-	Use:   "herosync",
-	Short: "Download, combine, and publish GoPro videos with ease",
-	CompletionOptions: cobra.CompletionOptions{
-		HiddenDefaultCmd: true,
-	},
-	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		logLevel := rootOpts.logLevel
-
-		if logLevel == "" {
-			cfg, err := config.Get()
-			if err != nil {
-				slog.Default().Warn("failed to load config, using default log level", "error", err)
-				logLevel = "info"
-			} else {
-				logLevel = cfg.Log.Level
-			}
-		}
-
-		// Initialize the global logger.
-		logger := initLogger(logLevel)
-		slog.SetDefault(logger)
-	},
-}
-
-func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
-		os.Exit(1)
+// NewRootCmd constructs the root command.
+func NewRootCmd() *cobra.Command {
+	rootCmd := &cobra.Command{
+		Use:   "herosync",
+		Short: "Download, combine, and publish GoPro videos with ease",
+		CompletionOptions: cobra.CompletionOptions{
+			HiddenDefaultCmd: true,
+		},
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			logLevel := logLevel(cmd)
+			logger := initLogger(logLevel)
+			slog.SetDefault(logger)
+		},
 	}
-}
 
-func init() {
-	// Commands are added here in a specific order to control their appearance in
-	// the help output.
 	cobra.EnableCommandSorting = false
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(listCmd)
@@ -65,63 +38,92 @@ func init() {
 	rootCmd.AddCommand(cleanupCmd)
 	rootCmd.AddCommand(yoloCmd)
 
-	cobra.OnInitialize(initConfig)
+	addGlobalFlags(rootCmd)
 
-	// Global Flags
+	// Ensure configuration is initialized before running any command.
+	cobra.OnInitialize(func() { initConfig(rootCmd) })
 
-	rootCmd.PersistentFlags().StringVar(&rootOpts.configFile, "config-file", "",
-		fmt.Sprintf("configuration file path\n"+
+	return rootCmd
+}
+
+// addGlobalFlags registers global CLI flags.
+func addGlobalFlags(rootCmd *cobra.Command) {
+	rootCmd.PersistentFlags().StringP("config-file", "c", "",
+		fmt.Sprintf("Configuration file path\n"+
 			"[env: HEROSYNC_CONFIG_FILE]\n"+
-			"[default: %s]\n",
-			fsutil.ShortenPath(config.DefaultConfigPath())))
+			"[default: %s]\n", fsutil.ShortenPath(config.DefaultConfigPath())))
 
 	rootCmd.MarkPersistentFlagFilename("config-file", "toml")
 
 	rootCmd.PersistentFlags().String("gopro-host", "",
-		fmt.Sprint("GoPro URL host (IP, hostname:port, \"\" for mDNS discovery)\n"+
+		"GoPro URL host (IP, hostname:port, \"\" for mDNS discovery)\n"+
 			"[env: HEROSYNC_GOPRO_HOST]\n"+
-			"[default: \"\"]\n"))
+			"[default: \"\"]")
 
 	rootCmd.PersistentFlags().String("gopro-scheme", "",
-		fmt.Sprint("GoPro URL scheme (http, https)\n"+
+		"GoPro URL scheme (http, https)\n"+
 			"[env: HEROSYNC_GOPRO_SCHEME]\n"+
-			"[default: http]\n"))
+			"[default: http]")
 
-	rootCmd.PersistentFlags().StringVarP(&rootOpts.logLevel, "log-level", "l", "",
-		fmt.Sprint("logging level (debug, info, warn, error)\n"+
+	rootCmd.PersistentFlags().StringP("log-level", "l", "",
+		"Logging level (debug, info, warn, error)\n"+
 			"[env: HEROSYNC_LOG_LEVEL]\n"+
-			"[default: info]\n"))
+			"[default: info]")
 
 	rootCmd.PersistentFlags().StringP("output-dir", "o", "",
-		fmt.Sprintf("output directory path\n"+
+		fmt.Sprintf("Output directory path\n"+
 			"[env: HEROSYNC_OUTPUT_DIR]\n"+
 			"[default: %s%c]\n",
-			fsutil.ShortenPath(config.DefaultOutputDir()),
-			filepath.Separator))
+			fsutil.ShortenPath(config.DefaultOutputDir()), filepath.Separator))
 
 	rootCmd.MarkPersistentFlagDirname("output-dir")
 }
 
-func initConfig() {
-	flags := make(map[string]any)
-	rootCmd.PersistentFlags().Visit(func(f *pflag.Flag) {
-		flags[f.Name] = f.Value.String()
-	})
-
-	// Only use environment variable or default path if --config-file flag wasn't explicitly set
-	if rootOpts.configFile == "" {
-		if envConfig := os.Getenv("HEROSYNC_CONFIG_FILE"); envConfig != "" {
-			rootOpts.configFile = envConfig
-		} else {
-			rootOpts.configFile = config.DefaultConfigPath()
-		}
+// configFile retrieves the configuration file path from flags or config.
+func configFile(cmd *cobra.Command) (path string) {
+	if path, _ = cmd.Flags().GetString("config-file"); path != "" {
+		return path
 	}
+	if path = os.Getenv("HEROSYNC_CONFIG_FILE"); path != "" {
+		return path
+	}
+	return config.DefaultConfigPath()
+}
 
-	if err := config.Init(rootOpts.configFile, flags); err != nil {
+// logLevel retrieves the log level from flags or config.
+func logLevel(cmd *cobra.Command) string {
+	lvl, _ := cmd.Flags().GetString("log-level")
+	if lvl == "" {
+		cfg, err := config.Get()
+		if err != nil {
+			slog.Default().Warn("failed to load config, using default log level", "error", err)
+			return "info"
+		}
+		return cfg.Log.Level
+	}
+	return lvl
+}
+
+// initConfig initializes the configuration.
+func initConfig(cmd *cobra.Command) {
+	path := configFile(cmd)
+	flags := collectFlagOverrides(cmd)
+
+	if err := config.Init(path, flags); err != nil {
 		log.Fatal(err)
 	}
 }
 
+// collectFlagOverrides extracts flag values for config overrides.
+func collectFlagOverrides(cmd *cobra.Command) map[string]any {
+	flags := make(map[string]any)
+	cmd.PersistentFlags().Visit(func(f *pflag.Flag) {
+		flags[f.Name] = f.Value.String()
+	})
+	return flags
+}
+
+// initLogger initializes the global logger.
 func initLogger(level string) *slog.Logger {
 	var lvl slog.Level
 	if err := lvl.UnmarshalText([]byte(level)); err != nil {
@@ -132,13 +134,9 @@ func initLogger(level string) *slog.Logger {
 	return slog.New(handler)
 }
 
-// getConfigWithFlags collects any set flags from the command and applies them to the configuration.
+// getConfigWithFlags applies CLI flags to config.
 func getConfigWithFlags(cmd *cobra.Command) (*config.Config, error) {
-	flags := make(map[string]any)
-	cmd.Flags().Visit(func(f *pflag.Flag) {
-		flags[f.Name] = f.Value.String()
-	})
-
+	flags := collectFlagOverrides(cmd)
 	if err := config.LoadFlags(flags); err != nil {
 		return nil, err
 	}
