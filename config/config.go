@@ -141,7 +141,7 @@ func (c *Config) GoProURL() (*url.URL, error) {
 
 // RawMediaDir returns the full path to the raw media directory.
 func (c *Config) RawMediaDir() string {
-	return filepath.Join(c.Output.Dir, "source")
+	return filepath.Join(c.Output.Dir, "raw")
 }
 
 // ProcessedMediaDir returns the full path to the processed media directory.

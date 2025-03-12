@@ -134,7 +134,7 @@ func downloadFile(ctx context.Context, client *gopro.Client, file *media.File, o
 		return fmt.Errorf("file size mismatch: got %d, expected %d", fileInfo.Size(), file.Size)
 	}
 
-	// Delete the remote file if --keep-originals is not specified.
+	// Delete the original remote file if --keep-originals is not set.
 	if !downloadOpts.keep {
 		goproPath := fmt.Sprintf("%s/%s", file.Directory, file.Filename)
 		if err := client.DeleteSingleMediaFile(ctx, goproPath); err != nil {

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -21,13 +22,19 @@ import (
 var combineCmd = &cobra.Command{
 	Use:     "combine",
 	Aliases: []string{"merge"},
-	Short:   "Merge source clips into final recordings",
+	Short:   "Merge grouped raw clips into final recordings",
 	RunE:    runCombine,
 }
 
+type combineOptions struct {
+	keep bool
+}
+
+var combineOpts combineOptions
+
 func init() {
 	combineCmd.Flags().String("group-by", "", "group videos by (media-id, date)")
-	// combineCmd.Flags().BoolVarP(&combineOpts.keep, "keep-originals", "k", false, "prevent deletion of raw files after combining")
+	combineCmd.Flags().BoolVarP(&combineOpts.keep, "keep-originals", "k", false, "prevent deletion of raw files after combining")
 }
 
 func runCombine(cmd *cobra.Command, args []string) error {
@@ -87,7 +94,7 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.Inventory)
 	}
 
 	if inv.HasUnsyncedFiles() {
-		log.Warn("skipping combination; not all group files are local")
+		log.Warn("skipping combination; not all group files have been downloaded")
 		return nil
 	}
 
@@ -97,10 +104,12 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.Inventory)
 
 	// Build the list of input files for FFmpeg.
 	var inputFiles []string
+	var totalSize int64
 	fmt.Println("Combining files:")
 	for _, file := range inv.Files {
 		fmt.Printf("  %s\n", file.Filename)
 		inputFiles = append(inputFiles, fmt.Sprintf("file '%s/%s'", cfg.RawMediaDir(), file.Filename))
+		totalSize += file.Size
 	}
 
 	// Create a temporary file for the file list.
@@ -118,7 +127,7 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.Inventory)
 	// Determine the output filename.
 	outputFilename, err := determineOutputFilename(cfg, inv)
 	if err != nil {
-		return err // Error already includes context
+		return err
 	}
 
 	fmt.Println("Output file:")
@@ -137,6 +146,36 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.Inventory)
 		return err
 	}
 	log.Debug("mtime updated", slog.String("filename", outputFilename))
+
+	// Verify the file size (with tolerance).
+	fileInfo, err := os.Stat(outputFilePath)
+	if err != nil {
+		log.Error("failed to stat combined file", slog.String("path", outputFilePath), slog.Any("error", err))
+		return err
+	}
+
+	// Allow for 1% size increase.
+	allowedMaxSize := float64(totalSize) * 1.01
+	if float64(fileInfo.Size()) > allowedMaxSize {
+		log.Error("combined file size exceeds allowed limit",
+			slog.String("filename", outputFilename),
+			slog.Int64("actual", fileInfo.Size()),
+			slog.Int64("expected_max", int64(allowedMaxSize)),
+		)
+		return fmt.Errorf("combined file size for %s exceeds allowed limit: got %d, expected max %d", outputFilename, fileInfo.Size(), int64(allowedMaxSize))
+	}
+
+	// Delete the original files if --keep-originals is not set.
+	if !combineOpts.keep {
+		for _, file := range inv.Files {
+			path := filepath.Join(cfg.RawMediaDir(), file.Filename)
+			if err := os.Remove(path); err != nil {
+				log.Error("failed to delete local file", slog.String("path", path), slog.Any("error", err))
+				return err
+			}
+			log.Info("local file deleted", slog.String("filename", file.Filename))
+		}
+	}
 
 	return nil
 }

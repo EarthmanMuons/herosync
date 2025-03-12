@@ -11,7 +11,7 @@ import (
 var yoloCmd = &cobra.Command{
 	Use:     "yolo",
 	Aliases: []string{"merge"},
-	Short:   "Hands-free: download, combine, publish, cleanup",
+	Short:   "Hands-free sync: download, combine, publish",
 	RunE:    runYolo,
 }
 
