@@ -23,14 +23,13 @@ func NewRootCmd() *cobra.Command {
 			HiddenDefaultCmd: true,
 		},
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			logLevel := logLevel(cmd)
-			logger := initLogger(logLevel)
+			logger := initLogger(logLevel(cmd))
 			slog.SetDefault(logger)
 		},
 	}
 
 	cobra.EnableCommandSorting = false
-	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(newStatusCmd())
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(downloadCmd)
 	rootCmd.AddCommand(combineCmd)
@@ -132,6 +131,18 @@ func initLogger(level string) *slog.Logger {
 
 	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: lvl})
 	return slog.New(handler)
+}
+
+// parseConfigAndLogger retrieves the runtime configuration and logger.
+func parseConfigAndLogger(cmd *cobra.Command) (*slog.Logger, *config.Config, error) {
+	logger := slog.Default()
+
+	cfg, err := getConfigWithFlags(cmd)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to load configuration: %w", err)
+	}
+
+	return logger, cfg, nil
 }
 
 // getConfigWithFlags applies CLI flags to config.

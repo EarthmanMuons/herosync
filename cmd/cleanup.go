@@ -49,19 +49,15 @@ func init() {
 }
 
 func runCleanup(cmd *cobra.Command, args []string) error {
-	logger := slog.Default()
-
-	cfg, err := getConfigWithFlags(cmd)
+	logger, cfg, err := parseConfigAndLogger(cmd)
 	if err != nil {
 		return err
 	}
 
-	baseURL, err := cfg.GoProURL()
+	client, err := gopro.NewClient(logger, cfg.GoPro.Scheme, cfg.GoPro.Host)
 	if err != nil {
-		return fmt.Errorf("failed to resolve GoPro connection: %v", err)
+		return fmt.Errorf("failed to initialize GoPro client: %w", err)
 	}
-
-	client := gopro.NewClient(baseURL, logger)
 
 	inventory, err := media.NewInventory(cmd.Context(), client, cfg.RawMediaDir())
 	if err != nil {

@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -133,10 +132,6 @@ func validateConfig(cfg *Config) error {
 	}
 
 	return nil
-}
-
-func (c *Config) GoProURL() (*url.URL, error) {
-	return resolveGoPro(c.GoPro.Host, c.GoPro.Scheme)
 }
 
 // RawMediaDir returns the full path to the raw media directory.

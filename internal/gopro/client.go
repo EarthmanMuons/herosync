@@ -37,7 +37,18 @@ type progressWriter struct {
 	bytesWritten int64
 }
 
-func NewClient(baseURL *url.URL, logger *slog.Logger) *Client {
+// NewClientDefault initializes a GoPro API client with the standard GoPro IP.
+func NewClientDefault(logger *slog.Logger) (*Client, error) {
+	return NewClient(logger, "http", "10.5.5.9:8080")
+}
+
+// NewClient initializes a GoPro API client, resolving the address if necessary.
+func NewClient(logger *slog.Logger, scheme, host string) (*Client, error) {
+	baseURL, err := resolveGoPro(host, scheme)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve GoPro address: %w", err)
+	}
+
 	client := retryablehttp.NewClient()
 	client.Logger = logger
 
@@ -45,7 +56,12 @@ func NewClient(baseURL *url.URL, logger *slog.Logger) *Client {
 		httpClient: client,
 		baseURL:    baseURL,
 		logger:     logger,
-	}
+	}, nil
+}
+
+// BaseURL returns the GoPro's resolved base URL.
+func (c *Client) BaseURL() string {
+	return c.baseURL.String()
 }
 
 // get creates and performs a GET request, handling request creation, retries,
