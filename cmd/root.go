@@ -23,6 +23,9 @@ func NewRootCmd() *cobra.Command {
 			HiddenDefaultCmd: true,
 		},
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			// Only print usage for argument parsing errors.
+			cmd.SilenceUsage = true
+
 			logger := initLogger(logLevel(cmd))
 			slog.SetDefault(logger)
 		},
@@ -30,7 +33,7 @@ func NewRootCmd() *cobra.Command {
 
 	cobra.EnableCommandSorting = false
 	rootCmd.AddCommand(newStatusCmd())
-	rootCmd.AddCommand(listCmd)
+	rootCmd.AddCommand(newListCmd())
 	rootCmd.AddCommand(downloadCmd)
 	rootCmd.AddCommand(combineCmd)
 	rootCmd.AddCommand(publishCmd)
@@ -129,7 +132,7 @@ func initLogger(level string) *slog.Logger {
 		lvl = slog.LevelInfo // fallback to a safe default
 	}
 
-	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: lvl})
+	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: lvl})
 	return slog.New(handler)
 }
 

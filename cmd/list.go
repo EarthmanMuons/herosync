@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -13,19 +12,18 @@ import (
 	"github.com/EarthmanMuons/herosync/internal/media"
 )
 
-var listCmd = &cobra.Command{
-	Use:     "list [FILENAME]...",
-	Aliases: []string{"ls"},
-	Short:   "Show media inventory and sync state details",
-	Args:    cobra.ArbitraryArgs,
-	RunE:    runList,
-
-	// only stored on gopro = File exists only on the GoPro
-	// only stored on local = File exists only locally
-	// file has been synced = File exists on both, with matching sizes
-	// SIZES ARE MISMATCHED = File exists on both, but sizes differ
+// newListCmd constructs the "list" subcommand.
+func newListCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:     "list [FILENAME]...",
+		Aliases: []string{"ls"},
+		Short:   "Show media inventory and sync state details",
+		Args:    cobra.ArbitraryArgs,
+		RunE:    runList,
+	}
 }
 
+// runList is the entry point for the "list" subcommand.
 func runList(cmd *cobra.Command, args []string) error {
 	logger, cfg, err := parseConfigAndLogger(cmd)
 	if err != nil {
@@ -49,15 +47,20 @@ func runList(cmd *cobra.Command, args []string) error {
 
 		if len(inventory.Files) == 0 {
 			logger.Error("no matching files", slog.Any("args", args))
-			os.Exit(1)
+			return fmt.Errorf("no matching files found for: %v", args)
 		}
 	}
 
+	printInventory(inventory)
+
+	return nil
+}
+
+// printInventory outputs the inventory in a human-readable format.
+func printInventory(inventory *media.Inventory) {
 	for _, file := range inventory.Files {
 		createdAt := file.CreatedAt.Format(time.DateTime)
 		humanSize := humanize.Bytes(uint64(file.Size))
 		fmt.Printf("%s %-15s %s %8s %22s\n", file.Status.Symbol(), file.Filename, createdAt, humanSize, file.Status)
 	}
-
-	return nil
 }
