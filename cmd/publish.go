@@ -1,11 +1,10 @@
 package cmd
 
 import (
+	"log/slog"
 	"os"
 
 	"github.com/spf13/cobra"
-
-	"github.com/EarthmanMuons/herosync/internal/logging"
 )
 
 var publishCmd = &cobra.Command{
@@ -16,16 +15,15 @@ var publishCmd = &cobra.Command{
 }
 
 func runPublish(cmd *cobra.Command, args []string) error {
-	log := logging.GetLogger()
+	logger := slog.Default()
 
 	// cfg, err := getConfigWithFlags(cmd)
 	// if err != nil {
 	// 	return err
 	// }
 
-	log.Error("UNIMPLEMENTED", "command", cmd.Use)
+	logger.Error("UNIMPLEMENTED", "command", cmd.Use)
 	os.Exit(1)
 
 	return nil
 }
-

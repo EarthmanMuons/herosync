@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -11,7 +12,6 @@ import (
 
 	"github.com/EarthmanMuons/herosync/config"
 	"github.com/EarthmanMuons/herosync/internal/fsutil"
-	"github.com/EarthmanMuons/herosync/internal/logging"
 )
 
 type rootOptions struct {
@@ -28,16 +28,21 @@ var rootCmd = &cobra.Command{
 		HiddenDefaultCmd: true,
 	},
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		// Bootstrap the logger as early as possible.
-		if rootOpts.logLevel == "" {
+		logLevel := rootOpts.logLevel
+
+		if logLevel == "" {
 			cfg, err := config.Get()
 			if err != nil {
-				log.Fatalf("Failed to get config: %v", err)
+				slog.Default().Warn("failed to load config, using default log level", "error", err)
+				logLevel = "info"
+			} else {
+				logLevel = cfg.Log.Level
 			}
-			rootOpts.logLevel = cfg.Log.Level
 		}
 
-		logging.Initialize(rootOpts.logLevel)
+		// Initialize the global logger.
+		logger := initLogger(logLevel)
+		slog.SetDefault(logger)
 	},
 }
 
@@ -115,6 +120,16 @@ func initConfig() {
 	if err := config.Init(rootOpts.configFile, flags); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func initLogger(level string) *slog.Logger {
+	var lvl slog.Level
+	if err := lvl.UnmarshalText([]byte(level)); err != nil {
+		lvl = slog.LevelInfo // fallback to a safe default
+	}
+
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: lvl})
+	return slog.New(handler)
 }
 
 // getConfigWithFlags collects any set flags from the command and applies them to the configuration.

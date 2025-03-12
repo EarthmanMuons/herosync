@@ -15,7 +15,6 @@ import (
 	"github.com/EarthmanMuons/herosync/config"
 	"github.com/EarthmanMuons/herosync/internal/fsutil"
 	"github.com/EarthmanMuons/herosync/internal/gopro"
-	"github.com/EarthmanMuons/herosync/internal/logging"
 	"github.com/EarthmanMuons/herosync/internal/media"
 )
 
@@ -38,7 +37,7 @@ func init() {
 }
 
 func runCombine(cmd *cobra.Command, args []string) error {
-	logger := logging.GetLogger()
+	logger := slog.Default()
 
 	cfg, err := getConfigWithFlags(cmd)
 	if err != nil {
@@ -50,7 +49,7 @@ func runCombine(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to resolve GoPro connection: %v", err)
 	}
 
-	client := gopro.NewClient(baseURL, logging.GetLogger())
+	client := gopro.NewClient(baseURL, logger)
 
 	inventory, err := media.NewInventory(cmd.Context(), client, cfg.RawMediaDir())
 	if err != nil {
@@ -64,7 +63,7 @@ func runCombine(cmd *cobra.Command, args []string) error {
 			filtered := inventory.FilterByMediaID(mediaID)
 			logger.Debug("combining files", "media-id", mediaID)
 
-			if err := combineFiles(cmd.Context(), cfg, filtered); err != nil {
+			if err := combineFiles(cmd.Context(), logger, cfg, filtered); err != nil {
 				fmt.Errorf("combining by media ID %d: %v", mediaID, err)
 			}
 		}
@@ -74,7 +73,7 @@ func runCombine(cmd *cobra.Command, args []string) error {
 			filtered := inventory.FilterByDate(date)
 			logger.Debug("combining files", "date", date.Format(time.DateOnly))
 
-			if err := combineFiles(cmd.Context(), cfg, filtered); err != nil {
+			if err := combineFiles(cmd.Context(), logger, cfg, filtered); err != nil {
 				fmt.Errorf("combining by date %s: %v", date.Format(time.DateOnly), err)
 			}
 		}
@@ -85,9 +84,7 @@ func runCombine(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func combineFiles(ctx context.Context, cfg *config.Config, inv *media.Inventory) error {
-	logger := logging.GetLogger()
-
+func combineFiles(ctx context.Context, logger *slog.Logger, cfg *config.Config, inv *media.Inventory) error {
 	if len(inv.Files) == 0 {
 		logger.Info("no files to combine")
 		return nil
@@ -114,7 +111,7 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.Inventory)
 	}
 	fmt.Printf("Output file: %s\n", fsutil.ShortenPath(outputFilePath))
 
-	if err := executeFFmpegWithFileList(ctx, cfg, inputFiles, outputFilePath); err != nil {
+	if err := executeFFmpegWithFileList(ctx, logger, cfg, inputFiles, outputFilePath); err != nil {
 		return err
 	}
 
@@ -179,7 +176,7 @@ func determineOutputFilename(cfg *config.Config, inv *media.Inventory) (string, 
 }
 
 // executeFFmpegWithFileList creates a temp file list, and executes ffmpeg.
-func executeFFmpegWithFileList(ctx context.Context, cfg *config.Config, inputFiles []string, outputFilePath string) error {
+func executeFFmpegWithFileList(ctx context.Context, logger *slog.Logger, cfg *config.Config, inputFiles []string, outputFilePath string) error {
 	tmpFile, err := os.CreateTemp("", "filelist*.txt")
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
@@ -191,12 +188,10 @@ func executeFFmpegWithFileList(ctx context.Context, cfg *config.Config, inputFil
 		return fmt.Errorf("writing to temp file: %w", err)
 	}
 
-	return executeFFmpeg(ctx, cfg, tmpFile.Name(), outputFilePath)
+	return executeFFmpeg(ctx, logger, cfg, tmpFile.Name(), outputFilePath)
 }
 
-func executeFFmpeg(ctx context.Context, cfg *config.Config, inputFileList, outputFilePath string) error {
-	log := logging.GetLogger()
-
+func executeFFmpeg(ctx context.Context, logger *slog.Logger, cfg *config.Config, inputFileList, outputFilePath string) error {
 	cmd := exec.CommandContext(
 		ctx,
 		"ffmpeg",
@@ -219,7 +214,7 @@ func executeFFmpeg(ctx context.Context, cfg *config.Config, inputFileList, outpu
 
 	if err := cmd.Run(); err != nil {
 		if cfg.Log.Level != "debug" {
-			log.Error(stdErrBuff.String())
+			logger.Error(stdErrBuff.String())
 		}
 		return fmt.Errorf("running ffmpeg: %w", err)
 	}

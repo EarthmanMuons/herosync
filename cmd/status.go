@@ -2,12 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
 	"github.com/EarthmanMuons/herosync/internal/gopro"
-	"github.com/EarthmanMuons/herosync/internal/logging"
 )
 
 var statusCmd = &cobra.Command{
@@ -18,6 +18,8 @@ var statusCmd = &cobra.Command{
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
+	logger := slog.Default()
+
 	cfg, err := getConfigWithFlags(cmd)
 	if err != nil {
 		return err
@@ -28,7 +30,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to resolve GoPro connection: %v", err)
 	}
 
-	client := gopro.NewClient(baseURL, logging.GetLogger())
+	client := gopro.NewClient(baseURL, logger)
 
 	hw, err := client.GetHardwareInfo(cmd.Context())
 	if err != nil {

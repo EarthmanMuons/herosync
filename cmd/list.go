@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/EarthmanMuons/herosync/internal/gopro"
-	"github.com/EarthmanMuons/herosync/internal/logging"
 	"github.com/EarthmanMuons/herosync/internal/media"
 )
 
@@ -28,7 +27,7 @@ var listCmd = &cobra.Command{
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	log := logging.GetLogger()
+	logger := slog.Default()
 
 	cfg, err := getConfigWithFlags(cmd)
 	if err != nil {
@@ -40,7 +39,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to resolve GoPro connection: %v", err)
 	}
 
-	client := gopro.NewClient(baseURL, logging.GetLogger())
+	client := gopro.NewClient(baseURL, logger)
 
 	inventory, err := media.NewInventory(cmd.Context(), client, cfg.RawMediaDir())
 	if err != nil {
@@ -49,11 +48,11 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	// Apply filename filtering if any were provided.
 	if len(args) > 0 {
-		log.Debug("filtering by filename", slog.Any("args", args))
+		logger.Debug("filtering by filename", slog.Any("args", args))
 		inventory = inventory.FilterByFilename(args)
 
 		if len(inventory.Files) == 0 {
-			log.Error("no matching files", slog.Any("args", args))
+			logger.Error("no matching files", slog.Any("args", args))
 			os.Exit(1)
 		}
 	}

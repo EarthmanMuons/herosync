@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/EarthmanMuons/herosync/internal/gopro"
-	"github.com/EarthmanMuons/herosync/internal/logging"
 	"github.com/EarthmanMuons/herosync/internal/media"
 )
 
@@ -50,7 +49,7 @@ func init() {
 }
 
 func runCleanup(cmd *cobra.Command, args []string) error {
-	log := logging.GetLogger()
+	logger := slog.Default()
 
 	cfg, err := getConfigWithFlags(cmd)
 	if err != nil {
@@ -62,7 +61,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to resolve GoPro connection: %v", err)
 	}
 
-	client := gopro.NewClient(baseURL, logging.GetLogger())
+	client := gopro.NewClient(baseURL, logger)
 
 	inventory, err := media.NewInventory(cmd.Context(), client, cfg.RawMediaDir())
 	if err != nil {
@@ -71,11 +70,11 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 
 	// Apply filename filtering if any were provided.
 	if len(args) > 0 {
-		log.Debug("filtering by filename", slog.Any("args", args))
+		logger.Debug("filtering by filename", slog.Any("args", args))
 		inventory = inventory.FilterByFilename(args)
 
 		if len(inventory.Files) == 0 {
-			log.Error("no matching files", slog.Any("args", args))
+			logger.Error("no matching files", slog.Any("args", args))
 			os.Exit(1)
 		}
 	}
@@ -94,28 +93,28 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		// Only delete synced files unless explicit --remote flag was provided.
 		if !cleanupOpts.remote && file.Status != media.InSync {
 			if file.Status == media.OnlyRemote {
-				log.Debug("skipping unsynced file deletion", slog.String("path", goproPath))
+				logger.Debug("skipping unsynced file deletion", slog.String("path", goproPath))
 			}
 		} else if !cleanupOpts.remote && cleanupOpts.local && file.Status == media.InSync {
-			log.Debug("skipping to prioritize local deletion", slog.String("path", goproPath))
+			logger.Debug("skipping to prioritize local deletion", slog.String("path", goproPath))
 		} else if file.Status != media.OnlyLocal {
-			log.Info("deleting remote file", slog.String("path", goproPath))
+			logger.Info("deleting remote file", slog.String("path", goproPath))
 
 			if err := client.DeleteSingleMediaFile(cmd.Context(), goproPath); err != nil {
-				log.Error("failed to delete remote file", slog.String("path", goproPath), slog.Any("error", err))
+				logger.Error("failed to delete remote file", slog.String("path", goproPath), slog.Any("error", err))
 			}
 		}
 
 		// *** Local Deletion
 		if cleanupOpts.local && file.Status != media.OnlyRemote {
 			localPath := filepath.Join(cfg.RawMediaDir(), file.Filename)
-			log.Info("deleting local file", slog.String("path", localPath))
+			logger.Info("deleting local file", slog.String("path", localPath))
 
 			if err := os.Remove(localPath); err != nil {
 				if os.IsNotExist(err) {
-					log.Warn("local file does not exist", "path", localPath)
+					logger.Warn("local file does not exist", "path", localPath)
 				} else {
-					log.Error("failed to delete local file", slog.String("path", localPath), slog.Any("error", err))
+					logger.Error("failed to delete local file", slog.String("path", localPath), slog.Any("error", err))
 				}
 			}
 		}
