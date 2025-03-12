@@ -33,7 +33,7 @@ var combineOpts combineOptions
 
 func init() {
 	combineCmd.Flags().String("group-by", "", "group videos by (media-id, date)")
-	combineCmd.Flags().BoolVarP(&combineOpts.keep, "keep-originals", "k", false, "prevent deletion of raw files after combining")
+	combineCmd.Flags().BoolVarP(&combineOpts.keep, "keep-original", "k", false, "prevent deletion of raw files after combining")
 }
 
 func runCombine(cmd *cobra.Command, args []string) error {
@@ -111,14 +111,14 @@ func combineFiles(ctx context.Context, logger *slog.Logger, cfg *config.Config, 
 		return err
 	}
 
-	// Set the file's modification time (mtime) to match the first video's creation timestamp.
+	// Preserve the modification time from the first video.
 	if err := fsutil.SetMtime(logger, outputFilePath, inv.Files[0].CreatedAt); err != nil {
 		return err
 	}
 
 	// Verify the file size (within 1% tolerance).
 	if err := fsutil.VerifySize(outputFilePath, inv.TotalSize(), 0.01); err != nil {
-		return err
+		return fmt.Errorf("failed to verify combined file: %w", err)
 	}
 
 	// Delete the original files if --keep-originals is not set.

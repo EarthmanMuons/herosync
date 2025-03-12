@@ -61,10 +61,11 @@ func VerifySize(path string, expectedSize int64, tolerance float64) error {
 	}
 
 	actualSize := fileInfo.Size()
+	base := filepath.Base(path)
 
 	if tolerance == 0.0 {
 		if actualSize != expectedSize {
-			return fmt.Errorf("file size mismatch: got %d, expected %d", actualSize, expectedSize)
+			return fmt.Errorf("file size mismatch for %q: got %d, expected %d", base, actualSize, expectedSize)
 		}
 		return nil
 	}
@@ -73,8 +74,7 @@ func VerifySize(path string, expectedSize int64, tolerance float64) error {
 	max := float64(expectedSize) * (1 + tolerance)
 
 	if float64(actualSize) < min || float64(actualSize) > max {
-		base := filepath.Base(path)
-		return fmt.Errorf("file size for %s out of tolerance: got %d, expected [%.2f, %.2f]", base, actualSize, min, max)
+		return fmt.Errorf("file size out of tolerance for %q: got %d, expected range [%.2f, %.2f]", base, actualSize, min, max)
 	}
 
 	return nil

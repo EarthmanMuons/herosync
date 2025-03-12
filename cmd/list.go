@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -41,14 +40,9 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Apply filename filtering if any were provided.
-	if len(args) > 0 {
-		logger.Debug("filtering by filename", slog.Any("args", args))
-		inventory = inventory.FilterByFilename(args)
-
-		if len(inventory.Files) == 0 {
-			logger.Error("no matching files", slog.Any("args", args))
-			return fmt.Errorf("no matching files found for: %v", args)
-		}
+	inventory, err = inventory.FilterByFilename(args)
+	if err != nil {
+		return err
 	}
 
 	printInventory(inventory)

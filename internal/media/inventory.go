@@ -187,23 +187,26 @@ func (inv *Inventory) FilterByDate(date time.Time) *Inventory {
 // FilterByFilename returns a new Inventory containing only files whose
 // filenames match (case-insensitive, partial match) any of the strings in the
 // provided filenames slice.
-func (inv *Inventory) FilterByFilename(filenames []string) *Inventory {
-	filtered := &Inventory{}
-
+func (inv *Inventory) FilterByFilename(filenames []string) (*Inventory, error) {
 	if len(filenames) == 0 {
-		return inv
+		return inv, nil // no filtering needed
 	}
 
+	filtered := &Inventory{}
 	for _, file := range inv.Files {
 		for _, filter := range filenames {
 			if strings.Contains(strings.ToLower(file.Filename), strings.ToLower(filter)) {
 				filtered.Files = append(filtered.Files, file)
-				break // Avoid adding the same file multiple times.
+				break // avoid adding the same file multiple times
 			}
 		}
 	}
 
-	return filtered
+	if len(filtered.Files) == 0 {
+		return nil, fmt.Errorf("no matching files found for: %v", filenames)
+	}
+
+	return filtered, nil
 }
 
 // FilterByMediaID returns a new Inventory containing only files with the specified Media ID.

@@ -65,14 +65,9 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 	}
 
 	// Apply filename filtering if any were provided.
-	if len(args) > 0 {
-		logger.Debug("filtering by filename", slog.Any("args", args))
-		inventory = inventory.FilterByFilename(args)
-
-		if len(inventory.Files) == 0 {
-			logger.Error("no matching files", slog.Any("args", args))
-			os.Exit(1)
-		}
+	inventory, err = inventory.FilterByFilename(args)
+	if err != nil {
+		return err
 	}
 
 	// Flags Used       | Deletes InSync GoPro Files | Deletes Other GoPro Files | Deletes Local Raw Files

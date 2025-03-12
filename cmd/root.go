@@ -34,7 +34,7 @@ func NewRootCmd() *cobra.Command {
 	cobra.EnableCommandSorting = false
 	rootCmd.AddCommand(newStatusCmd())
 	rootCmd.AddCommand(newListCmd())
-	rootCmd.AddCommand(downloadCmd)
+	rootCmd.AddCommand(newDownloadCmd())
 	rootCmd.AddCommand(combineCmd)
 	rootCmd.AddCommand(publishCmd)
 	rootCmd.AddCommand(cleanupCmd)
@@ -81,17 +81,6 @@ func addGlobalFlags(rootCmd *cobra.Command) {
 	rootCmd.MarkPersistentFlagDirname("output-dir")
 }
 
-// configFile retrieves the configuration file path from flags or config.
-func configFile(cmd *cobra.Command) (path string) {
-	if path, _ = cmd.Flags().GetString("config-file"); path != "" {
-		return path
-	}
-	if path = os.Getenv("HEROSYNC_CONFIG_FILE"); path != "" {
-		return path
-	}
-	return config.DefaultConfigPath()
-}
-
 // logLevel retrieves the log level from flags or config.
 func logLevel(cmd *cobra.Command) string {
 	lvl, _ := cmd.Flags().GetString("log-level")
@@ -114,6 +103,17 @@ func initConfig(cmd *cobra.Command) {
 	if err := config.Init(path, flags); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// configFile retrieves the configuration file path from flags or config.
+func configFile(cmd *cobra.Command) (path string) {
+	if path, _ = cmd.Flags().GetString("config-file"); path != "" {
+		return path
+	}
+	if path = os.Getenv("HEROSYNC_CONFIG_FILE"); path != "" {
+		return path
+	}
+	return config.DefaultConfigPath()
 }
 
 // collectFlagOverrides extracts flag values for config overrides.
