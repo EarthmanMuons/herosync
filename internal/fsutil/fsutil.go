@@ -2,10 +2,45 @@ package fsutil
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
+
+// GenerateUniqueFilename generates a unique filename based on the provided base path.
+// If the file already exists, it appends a counter (e.g., "_1", "_2") before the extension.
+func GenerateUniqueFilename(basePath string) (string, error) {
+	dir := filepath.Dir(basePath)
+	ext := filepath.Ext(basePath)
+	name := strings.TrimSuffix(filepath.Base(basePath), ext)
+
+	newPath := basePath
+	counter := 1
+
+	for {
+		_, err := os.Stat(newPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return newPath, nil // File doesn't exist, we're good.
+			}
+			return "", fmt.Errorf("stat file %s: %w", newPath, err)
+		}
+
+		newPath = filepath.Join(dir, fmt.Sprintf("%s_%d%s", name, counter, ext))
+		counter++
+	}
+}
+
+// SetMtime sets the modification time (mtime) of the file at the given path.
+func SetMtime(logger *slog.Logger, path string, mtime time.Time) error {
+	if err := os.Chtimes(path, time.Now(), mtime); err != nil {
+		return fmt.Errorf("set mtime on %s: %w", path, err)
+	}
+	logger.Debug("mtime updated", slog.String("path", path), slog.Time("timestamp", mtime))
+	return nil
+}
 
 // ShortenPath replaces the home directory path with ~
 func ShortenPath(path string) string {

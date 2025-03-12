@@ -38,7 +38,7 @@ func init() {
 }
 
 func runCombine(cmd *cobra.Command, args []string) error {
-	log := logging.GetLogger()
+	logger := logging.GetLogger()
 
 	cfg, err := getConfigWithFlags(cmd)
 	if err != nil {
@@ -62,7 +62,7 @@ func runCombine(cmd *cobra.Command, args []string) error {
 		mediaIDs := inventory.MediaIDs()
 		for _, mediaID := range mediaIDs {
 			filtered := inventory.FilterByMediaID(mediaID)
-			log.Debug("combining files", "media-id", mediaID)
+			logger.Debug("combining files", "media-id", mediaID)
 
 			if err := combineFiles(cmd.Context(), cfg, filtered); err != nil {
 				fmt.Errorf("combining by media ID %d: %v", mediaID, err)
@@ -72,7 +72,7 @@ func runCombine(cmd *cobra.Command, args []string) error {
 		dates := inventory.UniqueDates()
 		for _, date := range dates {
 			filtered := inventory.FilterByDate(date)
-			log.Debug("combining files", "date", date.Format(time.DateOnly))
+			logger.Debug("combining files", "date", date.Format(time.DateOnly))
 
 			if err := combineFiles(cmd.Context(), cfg, filtered); err != nil {
 				fmt.Errorf("combining by date %s: %v", date.Format(time.DateOnly), err)
@@ -86,15 +86,15 @@ func runCombine(cmd *cobra.Command, args []string) error {
 }
 
 func combineFiles(ctx context.Context, cfg *config.Config, inv *media.Inventory) error {
-	log := logging.GetLogger()
+	logger := logging.GetLogger()
 
 	if len(inv.Files) == 0 {
-		log.Info("no files to combine")
+		logger.Info("no files to combine")
 		return nil
 	}
 
 	if inv.HasUnsyncedFiles() {
-		log.Warn("skipping combination; not all group files have been downloaded")
+		logger.Warn("skipping group; not all files have been downloaded")
 		return nil
 	}
 
@@ -103,7 +103,7 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.Inventory)
 	}
 
 	// Build the list of input files for FFmpeg.
-	inputFiles, totalSize, err := prepareFiles(cfg, inv)
+	inputFiles, err := prepareFiles(cfg, inv)
 	if err != nil {
 		return err
 	}
@@ -119,14 +119,12 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.Inventory)
 	}
 
 	// Set the file's modification time (mtime) to match the first video's creation timestamp.
-	if err := os.Chtimes(outputFilePath, time.Now(), inv.Files[0].CreatedAt); err != nil {
-		log.Error("failed to set file mtime", slog.String("path", outputFilePath), slog.Time("mtime", inv.Files[0].CreatedAt), slog.Any("error", err))
+	if err := fsutil.SetMtime(logger, outputFilePath, inv.Files[0].CreatedAt); err != nil {
 		return err
 	}
-	log.Debug("mtime updated", slog.String("path", outputFilePath), slog.Time("timestamp", inv.Files[0].CreatedAt))
 
 	// Verify the file size (within 1% tolerance).
-	if err := fsutil.VerifySize(outputFilePath, totalSize, 0.01); err != nil {
+	if err := fsutil.VerifySize(outputFilePath, inv.TotalSize(), 0.01); err != nil {
 		return err
 	}
 
@@ -135,10 +133,10 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.Inventory)
 		for _, file := range inv.Files {
 			path := filepath.Join(cfg.RawMediaDir(), file.Filename)
 			if err := os.Remove(path); err != nil {
-				log.Error("failed to delete local file", slog.String("path", path), slog.Any("error", err))
+				logger.Error("failed to delete local file", slog.String("path", path), slog.Any("error", err))
 				return err
 			}
-			log.Info("local file deleted", slog.String("filename", file.Filename))
+			logger.Info("local file deleted", slog.String("filename", file.Filename))
 		}
 	}
 
@@ -146,16 +144,14 @@ func combineFiles(ctx context.Context, cfg *config.Config, inv *media.Inventory)
 }
 
 // prepareFiles builds the list of input files for FFmpeg and calculates total size.
-func prepareFiles(cfg *config.Config, inv *media.Inventory) ([]string, int64, error) {
+func prepareFiles(cfg *config.Config, inv *media.Inventory) ([]string, error) {
 	var inputFiles []string
 	fmt.Println("Combining files:")
-	var totalSize int64
 	for _, file := range inv.Files {
 		fmt.Printf("  %s\n", file.Filename)
 		inputFiles = append(inputFiles, fmt.Sprintf("file '%s/%s'", cfg.RawMediaDir(), file.Filename))
-		totalSize += file.Size
 	}
-	return inputFiles, totalSize, nil
+	return inputFiles, nil
 }
 
 // determineOutputFilePath determines and creates output file path, handling existing files.
@@ -165,27 +161,9 @@ func determineOutputFilePath(cfg *config.Config, inv *media.Inventory) (string, 
 		return "", err
 	}
 
-	base := outputFilename
-	ext := filepath.Ext(outputFilename)
-	if ext != "" {
-		base = outputFilename[:len(outputFilename)-len(ext)]
-	}
-	counter := 1
-	outputFilePath := filepath.Join(cfg.ProcessedMediaDir(), outputFilename)
+	fullPath := filepath.Join(cfg.ProcessedMediaDir(), outputFilename)
 
-	for {
-		_, err := os.Stat(outputFilePath)
-		if os.IsNotExist(err) {
-			break
-		}
-		if err != nil {
-			return "", fmt.Errorf("checking output file existence: %w", err)
-		}
-		outputFilename = fmt.Sprintf("%s_%d%s", base, counter, ext)
-		outputFilePath = filepath.Join(cfg.ProcessedMediaDir(), outputFilename)
-		counter++
-	}
-	return outputFilePath, nil
+	return fsutil.GenerateUniqueFilename(fullPath)
 }
 
 func determineOutputFilename(cfg *config.Config, inv *media.Inventory) (string, error) {
