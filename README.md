@@ -28,23 +28,27 @@ Available Commands:
   help        Help about any command
 
 Flags:
-  -c, --config-file string    Configuration file path
+  -c, --config-file string    configuration file path
                               [env: HEROSYNC_CONFIG_FILE]
                               [default: ~/Library/Application Support/herosync/config.toml]
 
       --gopro-host string     GoPro URL host (IP, hostname:port, "" for mDNS discovery)
                               [env: HEROSYNC_GOPRO_HOST]
                               [default: ""]
+
       --gopro-scheme string   GoPro URL scheme (http, https)
                               [env: HEROSYNC_GOPRO_SCHEME]
                               [default: http]
+
   -h, --help                  help for herosync
-  -l, --log-level string      Logging level (debug, info, warn, error)
+
+  -l, --log-level string      logging level (debug, info, warn, error)
                               [env: HEROSYNC_LOG_LEVEL]
                               [default: info]
-  -o, --output-dir string     Output directory path
+
+  -o, --output-dir string     output directory path
                               [env: HEROSYNC_OUTPUT_DIR]
-                              [default: ~/Library/Application Support/herosync/media/]
+                              [default: ~/Library/Application Support/herosync/media]
 
 Use "herosync [command] --help" for more information about a command.
 ```

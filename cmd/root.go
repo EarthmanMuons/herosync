@@ -61,6 +61,8 @@ const (
 [env: HEROSYNC_GOPRO_SCHEME]
 [default: http]
 `
+	helpUsage = `help for herosync
+`
 	logLevelUsage = `logging level (debug, info, warn, error)
 [env: HEROSYNC_LOG_LEVEL]
 [default: info]
@@ -79,6 +81,7 @@ func addGlobalFlags(rootCmd *cobra.Command) {
 	rootCmd.PersistentFlags().StringP("config-file", "c", "", fmt.Sprintf(configFileUsage, defaultConfig))
 	rootCmd.PersistentFlags().String("gopro-host", "", goproHostUsage)
 	rootCmd.PersistentFlags().String("gopro-scheme", "", goproSchemeUsage)
+	rootCmd.PersistentFlags().BoolP("help", "h", false, helpUsage)
 	rootCmd.PersistentFlags().StringP("log-level", "l", "", logLevelUsage)
 	rootCmd.PersistentFlags().StringP("output-dir", "o", "", fmt.Sprintf(outputDirUsage, defaultOutput))
 
