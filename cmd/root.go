@@ -5,7 +5,6 @@ import (
 	"log"
 	"log/slog"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -48,36 +47,42 @@ func NewRootCmd() *cobra.Command {
 	return rootCmd
 }
 
+const (
+	configFileUsage = `configuration file path
+[env: HEROSYNC_CONFIG_FILE]
+[default: %s]
+`
+	goproHostUsage = `GoPro URL host (IP, hostname:port, "" for mDNS discovery)
+[env: HEROSYNC_GOPRO_HOST]
+[default: ""]
+`
+	goproSchemeUsage = `GoPro URL scheme (http, https)
+[env: HEROSYNC_GOPRO_SCHEME]
+[default: http]
+`
+	logLevelUsage = `logging level (debug, info, warn, error)
+[env: HEROSYNC_LOG_LEVEL]
+[default: info]
+`
+	outputDirUsage = `output directory path
+[env: HEROSYNC_OUTPUT_DIR]
+[default: %s]
+`
+)
+
 // addGlobalFlags registers global CLI flags.
 func addGlobalFlags(rootCmd *cobra.Command) {
-	rootCmd.PersistentFlags().StringP("config-file", "c", "",
-		fmt.Sprintf("Configuration file path\n"+
-			"[env: HEROSYNC_CONFIG_FILE]\n"+
-			"[default: %s]\n", fsutil.ShortenPath(config.DefaultConfigPath())))
+	defaultConfig := fsutil.ShortenPath(config.DefaultConfigPath())
+	defaultOutput := fsutil.ShortenPath(config.DefaultOutputDir())
 
+	rootCmd.PersistentFlags().StringP("config-file", "c", "", fmt.Sprintf(configFileUsage, defaultConfig))
+	rootCmd.PersistentFlags().String("gopro-host", "", goproHostUsage)
+	rootCmd.PersistentFlags().String("gopro-scheme", "", goproSchemeUsage)
+	rootCmd.PersistentFlags().StringP("log-level", "l", "", logLevelUsage)
+	rootCmd.PersistentFlags().StringP("output-dir", "o", "", fmt.Sprintf(outputDirUsage, defaultOutput))
+
+	// Define shell completion hints.
 	rootCmd.MarkPersistentFlagFilename("config-file", "toml")
-
-	rootCmd.PersistentFlags().String("gopro-host", "",
-		"GoPro URL host (IP, hostname:port, \"\" for mDNS discovery)\n"+
-			"[env: HEROSYNC_GOPRO_HOST]\n"+
-			"[default: \"\"]")
-
-	rootCmd.PersistentFlags().String("gopro-scheme", "",
-		"GoPro URL scheme (http, https)\n"+
-			"[env: HEROSYNC_GOPRO_SCHEME]\n"+
-			"[default: http]")
-
-	rootCmd.PersistentFlags().StringP("log-level", "l", "",
-		"Logging level (debug, info, warn, error)\n"+
-			"[env: HEROSYNC_LOG_LEVEL]\n"+
-			"[default: info]")
-
-	rootCmd.PersistentFlags().StringP("output-dir", "o", "",
-		fmt.Sprintf("Output directory path\n"+
-			"[env: HEROSYNC_OUTPUT_DIR]\n"+
-			"[default: %s%c]\n",
-			fsutil.ShortenPath(config.DefaultOutputDir()), filepath.Separator))
-
 	rootCmd.MarkPersistentFlagDirname("output-dir")
 }
 
