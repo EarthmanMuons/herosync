@@ -79,11 +79,11 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		keepOriginal: keepOriginal,
 	}
 
-	return downloadInventory(ctx, opts)
+	return downloadInventory(ctx, &opts)
 }
 
 // downloadInventory handles downloading files based on their sync status.
-func downloadInventory(ctx context.Context, opts downloadOptions) error {
+func downloadInventory(ctx context.Context, opts *downloadOptions) error {
 	var errs []error
 	for _, file := range opts.inventory.Files {
 		shouldDownload := shouldDownload(file, opts.force)
@@ -115,7 +115,7 @@ func shouldDownload(file media.File, force bool) bool {
 }
 
 // downloadAndVerify handles downloading a single file and post-download checks.
-func downloadAndVerify(ctx context.Context, file *media.File, opts downloadOptions) error {
+func downloadAndVerify(ctx context.Context, file *media.File, opts *downloadOptions) error {
 	downloadPath := filepath.Join(opts.outputDir, file.Filename)
 
 	if err := opts.client.DownloadMediaFile(ctx, file.Directory, file.Filename, opts.outputDir); err != nil {
