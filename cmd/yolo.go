@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newYOLOCmd constructs the "publish" subcommand.
+// newYOLOCmd constructs the "yolo" subcommand.
 func newYOLOCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "yolo",

@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newPublishCmdconstructs the "publish" subcommand.
+// newPublishCmd constructs the "publish" subcommand.
 func newPublishCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "publish",
