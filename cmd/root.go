@@ -105,6 +105,11 @@ func initConfig(cmd *cobra.Command) {
 	path := configFile(cmd)
 	flags := collectFlagOverrides(cmd)
 
+	// Load the full configuration stack:
+	// 1. Defaults
+	// 2. Config file
+	// 3. Env vars
+	// 4. Global CLI flags (subcommand flags are NOT available yet)
 	if err := config.Init(path, flags); err != nil {
 		log.Fatal(err)
 	}
@@ -145,19 +150,17 @@ func initLogger(level string) *slog.Logger {
 func parseConfigAndLogger(cmd *cobra.Command) (*slog.Logger, *config.Config, error) {
 	logger := slog.Default()
 
-	cfg, err := getConfigWithFlags(cmd)
+	// Now that subcommands have been parsed, apply any subcommand-specific flags.
+	flags := collectFlagOverrides(cmd)
+	if err := config.LoadFlags(flags); err != nil {
+		return nil, nil, fmt.Errorf("applying subcommand flags: %w", err)
+	}
+
+	// Retrieve the fully merged configuration.
+	cfg, err := config.Get()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load configuration: %w", err)
+		return nil, nil, fmt.Errorf("loading configuration: %w", err)
 	}
 
 	return logger, cfg, nil
-}
-
-// getConfigWithFlags applies CLI flags to config.
-func getConfigWithFlags(cmd *cobra.Command) (*config.Config, error) {
-	flags := collectFlagOverrides(cmd)
-	if err := config.LoadFlags(flags); err != nil {
-		return nil, err
-	}
-	return config.Get()
 }

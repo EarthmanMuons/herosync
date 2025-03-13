@@ -60,7 +60,7 @@ func Init(configFile string, flags map[string]any) error {
 		return err
 	}
 
-	// 4. Load command line flags (highest priority)
+	// 4. Load global command line flags (highest priority)
 	if err := LoadFlags(flags); err != nil {
 		return err
 	}
@@ -115,14 +115,14 @@ func validateConfig(cfg *Config) error {
 	case "http", "https":
 		// valid
 	default:
-		return fmt.Errorf("invalid scheme: %s; choose http or https", cfg.GoPro.Scheme)
+		return fmt.Errorf("invalid scheme: %q (choose http or https)", cfg.GoPro.Scheme)
 	}
 
 	switch cfg.Group.By {
 	case "media-id", "date":
 		// valid
 	default:
-		return fmt.Errorf("invalid group: %s; choose media-id or date", cfg.GoPro.Scheme)
+		return fmt.Errorf("invalid group: %q (choose media-id or date)", cfg.Group.By)
 	}
 
 	// Try unmarshalling the log level to validate it.

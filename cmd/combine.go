@@ -67,8 +67,6 @@ func runCombine(cmd *cobra.Command, args []string) error {
 	groupBy := cfg.Group.By
 	keepOriginal, _ := cmd.Flags().GetBool("keep-original")
 
-	fmt.Printf("TESTING groupBy: %q, keepOriginal: %t\n", groupBy, keepOriginal)
-
 	opts := combineOptions{
 		logger:       logger,
 		client:       client,
