@@ -53,6 +53,10 @@ Flags:
 Use "herosync [command] --help" for more information about a command.
 ```
 
+### YouTube Authorization Credentials
+
+TBD
+
 ## Caveats
 
 `herosync` was designed specifically for my niche use case and will likely **not
