@@ -16,13 +16,13 @@ func resolveGoPro(host, scheme string) (*url.URL, error) {
 		scheme = "http"
 	}
 	if scheme != "http" && scheme != "https" {
-		return nil, fmt.Errorf("invalid scheme: %s; choose http or https", scheme)
+		return nil, fmt.Errorf("invalid scheme: %q; choose http or https", scheme)
 	}
 
 	// Resolve host to an IP address if needed.
 	resolvedHost, err := resolveHost(host)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve GoPro address: %w", err)
+		return nil, fmt.Errorf("could not resolve GoPro address: %w", err)
 	}
 
 	return &url.URL{

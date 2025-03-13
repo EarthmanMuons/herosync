@@ -3,7 +3,7 @@ package gopro
 // https://gopro.github.io/OpenGoPro/http#tag/Models
 //
 // Note: This implementation intentionally parses only a subset of available API fields.
-// For the complete API specification, see the OpenGoPro documentation linked above.
+// For the complete API specification, see the Open GoPro documentation linked above.
 
 import (
 	"encoding/json"
@@ -88,7 +88,7 @@ func (m *MediaListItem) UnmarshalJSON(data []byte) error {
 func (c *cameraStateStatus) UnmarshalJSON(data []byte) error {
 	type Alias cameraStateStatus
 	aux := &struct {
-		CapacityKB int64 `json:"117"`
+		CapacityKB  int64 `json:"117"`
 		RemainingKB int64 `json:"54"`
 		*Alias
 	}{

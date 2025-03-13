@@ -46,7 +46,7 @@ func NewClientDefault(logger *slog.Logger) (*Client, error) {
 func NewClient(logger *slog.Logger, scheme, host string) (*Client, error) {
 	baseURL, err := resolveGoPro(host, scheme)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve GoPro address: %w", err)
+		return nil, fmt.Errorf("failed to initialize GoPro client: %w", err)
 	}
 
 	client := retryablehttp.NewClient()

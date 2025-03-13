@@ -42,7 +42,7 @@ func runCombine(cmd *cobra.Command, args []string) error {
 
 	client, err := gopro.NewClient(logger, cfg.GoPro.Scheme, cfg.GoPro.Host)
 	if err != nil {
-		return fmt.Errorf("failed to initialize GoPro client: %w", err)
+		return err
 	}
 
 	inventory, err := media.NewInventory(cmd.Context(), client, cfg.OriginalMediaDir())
