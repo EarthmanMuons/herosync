@@ -18,24 +18,22 @@ import (
 	"github.com/EarthmanMuons/herosync/internal/media"
 )
 
-var combineCmd = &cobra.Command{
-	Use:     "combine",
-	Aliases: []string{"merge"},
-	Short:   "Merge grouped raw clips into final recordings",
-	RunE:    runCombine,
+// newCombineCmd constructs the "combine" subcommand.
+func newCombineCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "combine",
+		Aliases: []string{"merge"},
+		Short:   "Merge grouped raw clips into final recordings",
+		RunE:    runCombine,
+	}
+
+	cmd.Flags().String("group-by", "", "group videos by (media-id, date)")
+	cmd.Flags().BoolP("keep-original", "k", false, "prevent deletion of raw files after combining")
+
+	return cmd
 }
 
-type combineOptions struct {
-	keep bool
-}
-
-var combineOpts combineOptions
-
-func init() {
-	combineCmd.Flags().String("group-by", "", "group videos by (media-id, date)")
-	combineCmd.Flags().BoolVarP(&combineOpts.keep, "keep-original", "k", false, "prevent deletion of raw files after combining")
-}
-
+// runCombine is the entry point for the "combine" subcommand.
 func runCombine(cmd *cobra.Command, args []string) error {
 	logger, cfg, err := parseConfigAndLogger(cmd)
 	if err != nil {
@@ -52,77 +50,96 @@ func runCombine(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	keepOriginal, _ := cmd.Flags().GetBool("keep-original")
+
 	switch cfg.Group.By {
 	case "media-id":
-		mediaIDs := inventory.MediaIDs()
-		for _, mediaID := range mediaIDs {
-			filtered := inventory.FilterByMediaID(mediaID)
-			logger.Debug("combining files", "media-id", mediaID)
-
-			if err := combineFiles(cmd.Context(), logger, cfg, filtered); err != nil {
-				fmt.Errorf("combining by media ID %d: %v", mediaID, err)
-			}
-		}
+		return combineByMediaID(cmd.Context(), logger, cfg, inventory, keepOriginal)
 	case "date":
-		dates := inventory.UniqueDates()
-		for _, date := range dates {
-			filtered := inventory.FilterByDate(date)
-			logger.Debug("combining files", "date", date.Format(time.DateOnly))
-
-			if err := combineFiles(cmd.Context(), logger, cfg, filtered); err != nil {
-				fmt.Errorf("combining by date %s: %v", date.Format(time.DateOnly), err)
-			}
-		}
+		return combineByDate(cmd.Context(), logger, cfg, inventory, keepOriginal)
 	default:
 		return fmt.Errorf("invalid group-by option: %s", cfg.Group.By)
 	}
-
-	return nil
 }
 
-func combineFiles(ctx context.Context, logger *slog.Logger, cfg *config.Config, inv *media.Inventory) error {
-	if len(inv.Files) == 0 {
-		logger.Info("no files to combine")
+func combineByMediaID(ctx context.Context, logger *slog.Logger, cfg *config.Config, inventory *media.Inventory, keepOriginal bool) error {
+	mediaIDs := inventory.MediaIDs()
+	if len(mediaIDs) == 0 {
+		logger.Debug("no Media IDs found to combine")
 		return nil
 	}
 
+	for _, mediaID := range mediaIDs {
+		filtered, err := inventory.FilterByMediaID(mediaID)
+		if err != nil {
+			return err
+		}
+
+		logger.Debug("combining files", "media-id", mediaID)
+
+		if err := combineFiles(ctx, logger, cfg, filtered, keepOriginal); err != nil {
+			return fmt.Errorf("combining by media ID %d: %w", mediaID, err)
+		}
+	}
+	return nil
+}
+
+func combineByDate(ctx context.Context, logger *slog.Logger, cfg *config.Config, inventory *media.Inventory, keepOriginal bool) error {
+	dates := inventory.UniqueDates()
+	if len(dates) == 0 {
+		logger.Debug("no dates found to combine")
+		return nil
+	}
+
+	for _, date := range dates {
+		filtered, err := inventory.FilterByDate(date)
+		if err != nil {
+			return err
+		}
+
+		logger.Debug("combining files", "date", date.Format(time.DateOnly))
+
+		if err := combineFiles(ctx, logger, cfg, filtered, keepOriginal); err != nil {
+			return fmt.Errorf("combining by date %s: %w", date.Format(time.DateOnly), err)
+		}
+	}
+	return nil
+}
+
+func combineFiles(ctx context.Context, logger *slog.Logger, cfg *config.Config, inv *media.Inventory, keepOriginal bool) error {
 	if inv.HasUnsyncedFiles() {
 		logger.Warn("skipping group; not all files have been downloaded")
 		return nil
 	}
 
-	if err := os.MkdirAll(cfg.ProcessedMediaDir(), 0o750); err != nil {
-		return fmt.Errorf("creating directory: %w", err)
-	}
-
-	// Build the list of input files for FFmpeg.
-	inputFiles, err := prepareFiles(cfg, inv)
+	// Build the input file list for FFmpeg.
+	inputFiles, err := buildFFmpegInputList(cfg, inv)
 	if err != nil {
 		return err
 	}
 
-	outputFilePath, err := determineOutputFilePath(cfg, inv)
+	outputPath, err := generateOutputPath(cfg, inv)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Output file: %s\n", fsutil.ShortenPath(outputFilePath))
+	fmt.Printf("Output file: %s\n", fsutil.ShortenPath(outputPath))
 
-	if err := executeFFmpegWithFileList(ctx, logger, cfg, inputFiles, outputFilePath); err != nil {
+	if err := runFFmpegWithInputList(ctx, logger, cfg, inputFiles, outputPath); err != nil {
 		return err
 	}
 
 	// Preserve the modification time from the first video.
-	if err := fsutil.SetMtime(logger, outputFilePath, inv.Files[0].CreatedAt); err != nil {
+	if err := fsutil.SetMtime(logger, outputPath, inv.Files[0].CreatedAt); err != nil {
 		return err
 	}
 
 	// Verify the file size (within 1% tolerance).
-	if err := fsutil.VerifySize(outputFilePath, inv.TotalSize(), 0.01); err != nil {
+	if err := fsutil.VerifySize(outputPath, inv.TotalSize(), 0.01); err != nil {
 		return fmt.Errorf("failed to verify combined file: %w", err)
 	}
 
-	// Delete the original files if --keep-originals is not set.
-	if !combineOpts.keep {
+	// Delete the original files if --keep-original is not set.
+	if !keepOriginal {
 		for _, file := range inv.Files {
 			path := filepath.Join(cfg.RawMediaDir(), file.Filename)
 			if err := os.Remove(path); err != nil {
@@ -136,8 +153,8 @@ func combineFiles(ctx context.Context, logger *slog.Logger, cfg *config.Config, 
 	return nil
 }
 
-// prepareFiles builds the list of input files for FFmpeg and calculates total size.
-func prepareFiles(cfg *config.Config, inv *media.Inventory) ([]string, error) {
+// buildFFmpegInputList builds the list of input files for FFmpeg and calculates total size.
+func buildFFmpegInputList(cfg *config.Config, inv *media.Inventory) ([]string, error) {
 	var inputFiles []string
 	fmt.Println("Combining files:")
 	for _, file := range inv.Files {
@@ -147,32 +164,31 @@ func prepareFiles(cfg *config.Config, inv *media.Inventory) ([]string, error) {
 	return inputFiles, nil
 }
 
-// determineOutputFilePath determines and creates output file path, handling existing files.
-func determineOutputFilePath(cfg *config.Config, inv *media.Inventory) (string, error) {
-	outputFilename, err := determineOutputFilename(cfg, inv)
-	if err != nil {
-		return "", err
-	}
+// generateOutputPath determines a unique output file path based on the grouping method.
+func generateOutputPath(cfg *config.Config, inv *media.Inventory) (string, error) {
+	var outputFilename string
 
-	fullPath := filepath.Join(cfg.ProcessedMediaDir(), outputFilename)
-
-	return fsutil.GenerateUniqueFilename(fullPath)
-}
-
-func determineOutputFilename(cfg *config.Config, inv *media.Inventory) (string, error) {
 	switch cfg.Group.By {
 	case "media-id":
 		firstFile := gopro.ParseFilename(inv.Files[0].Filename)
-		return fmt.Sprintf("gopro-%04d.mp4", firstFile.MediaID), nil
+		outputFilename = fmt.Sprintf("gopro-%04d.mp4", firstFile.MediaID)
 	case "date":
-		return fmt.Sprintf("daily-%s.mp4", inv.Files[0].CreatedAt.Format(time.DateOnly)), nil
+		outputFilename = fmt.Sprintf("daily-%s.mp4", inv.Files[0].CreatedAt.Format(time.DateOnly))
 	default:
 		return "", fmt.Errorf("invalid group-by option: %s", cfg.Group.By)
 	}
+
+	fullPath := filepath.Join(cfg.ProcessedMediaDir(), outputFilename)
+	return fsutil.GenerateUniqueFilename(fullPath)
 }
 
-// executeFFmpegWithFileList creates a temp file list, and executes ffmpeg.
-func executeFFmpegWithFileList(ctx context.Context, logger *slog.Logger, cfg *config.Config, inputFiles []string, outputFilePath string) error {
+// runFFmpegWithInputList creates a temp file list, and executes FFmpeg.
+func runFFmpegWithInputList(ctx context.Context, logger *slog.Logger, cfg *config.Config, inputFiles []string, outputFilePath string) error {
+	// Ensure the output directory exists before running FFmpeg.
+	if err := os.MkdirAll(outputFilePath, 0o750); err != nil {
+		return fmt.Errorf("creating output directory: %w", err)
+	}
+
 	tmpFile, err := os.CreateTemp("", "filelist*.txt")
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
@@ -184,10 +200,10 @@ func executeFFmpegWithFileList(ctx context.Context, logger *slog.Logger, cfg *co
 		return fmt.Errorf("writing to temp file: %w", err)
 	}
 
-	return executeFFmpeg(ctx, logger, cfg, tmpFile.Name(), outputFilePath)
+	return runFFmpeg(ctx, logger, cfg, tmpFile.Name(), outputFilePath)
 }
 
-func executeFFmpeg(ctx context.Context, logger *slog.Logger, cfg *config.Config, inputFileList, outputFilePath string) error {
+func runFFmpeg(ctx context.Context, logger *slog.Logger, cfg *config.Config, inputFileList, outputFilePath string) error {
 	cmd := exec.CommandContext(
 		ctx,
 		"ffmpeg",
@@ -200,7 +216,7 @@ func executeFFmpeg(ctx context.Context, logger *slog.Logger, cfg *config.Config,
 
 	var stdErrBuff strings.Builder
 
-	// Only show FFmpeg output if log level is "debug" or higher
+	// Only show FFmpeg output if log level is "debug" or higher.
 	if cfg.Log.Level == "debug" {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr

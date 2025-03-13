@@ -170,7 +170,7 @@ func scanLocalFiles(dir string) (map[string]os.FileInfo, error) {
 }
 
 // FilterByDate returns a new Inventory containing only files created on the specified date.
-func (inv *Inventory) FilterByDate(date time.Time) *Inventory {
+func (inv *Inventory) FilterByDate(date time.Time) (*Inventory, error) {
 	filtered := &Inventory{}
 
 	for _, file := range inv.Files {
@@ -181,7 +181,12 @@ func (inv *Inventory) FilterByDate(date time.Time) *Inventory {
 			filtered.Files = append(filtered.Files, file)
 		}
 	}
-	return filtered
+
+	if len(filtered.Files) == 0 {
+		return nil, fmt.Errorf("no matching files found for date: %s", date.Format(time.DateOnly))
+	}
+
+	return filtered, nil
 }
 
 // FilterByFilename returns a new Inventory containing only files whose
@@ -203,14 +208,14 @@ func (inv *Inventory) FilterByFilename(filenames []string) (*Inventory, error) {
 	}
 
 	if len(filtered.Files) == 0 {
-		return nil, fmt.Errorf("no matching files found for: %v", filenames)
+		return nil, fmt.Errorf("no matching files found for filenames: %v", filenames)
 	}
 
 	return filtered, nil
 }
 
 // FilterByMediaID returns a new Inventory containing only files with the specified Media ID.
-func (inv *Inventory) FilterByMediaID(mediaID int) *Inventory {
+func (inv *Inventory) FilterByMediaID(mediaID int) (*Inventory, error) {
 	filtered := &Inventory{}
 	var chapters []File
 
@@ -229,25 +234,11 @@ func (inv *Inventory) FilterByMediaID(mediaID int) *Inventory {
 	})
 	filtered.Files = append(filtered.Files, chapters...)
 
-	return filtered
-}
-
-// FilterByStatus returns a new Inventory containing only files that have one of
-// the specified statuses.
-func (inv *Inventory) FilterByStatus(statuses ...Status) *Inventory {
-	filtered := &Inventory{}
-
-	if len(statuses) == 0 {
-		return inv // Return the original if no statuses are provided
+	if len(filtered.Files) == 0 {
+		return nil, fmt.Errorf("no matching files found for Media ID: %d", mediaID)
 	}
 
-	for _, file := range inv.Files {
-		if slices.Contains(statuses, file.Status) {
-			filtered.Files = append(filtered.Files, file)
-		}
-	}
-
-	return filtered
+	return filtered, nil
 }
 
 // TotalSize returns the sum total size (in bytes) of all of the files in the Inventory.
