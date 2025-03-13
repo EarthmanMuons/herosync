@@ -24,6 +24,8 @@ func newListCmd() *cobra.Command {
 
 // runList is the entry point for the "list" subcommand.
 func runList(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+
 	logger, cfg, err := parseConfigAndLogger(cmd)
 	if err != nil {
 		return err
@@ -34,12 +36,12 @@ func runList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	inventory, err := media.NewInventory(cmd.Context(), client, cfg.OriginalMediaDir())
+	outputDir := cfg.OriginalMediaDir()
+
+	inventory, err := media.NewInventory(ctx, client, outputDir)
 	if err != nil {
 		return err
 	}
-
-	// Apply filename filtering if any were provided.
 	inventory, err = inventory.FilterByFilename(args)
 	if err != nil {
 		return err

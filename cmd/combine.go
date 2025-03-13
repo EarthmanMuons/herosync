@@ -12,11 +12,20 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/EarthmanMuons/herosync/config"
 	"github.com/EarthmanMuons/herosync/internal/fsutil"
 	"github.com/EarthmanMuons/herosync/internal/gopro"
 	"github.com/EarthmanMuons/herosync/internal/media"
 )
+
+type combineOptions struct {
+	logger       *slog.Logger
+	client       *gopro.Client
+	origMediaDir string
+	procMediaDir string
+	inventory    *media.Inventory
+	groupBy      string
+	keepOriginal bool
+}
 
 // newCombineCmd constructs the "combine" subcommand.
 func newCombineCmd() *cobra.Command {
@@ -35,6 +44,8 @@ func newCombineCmd() *cobra.Command {
 
 // runCombine is the entry point for the "combine" subcommand.
 func runCombine(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+
 	logger, cfg, err := parseConfigAndLogger(cmd)
 	if err != nil {
 		return err
@@ -45,91 +56,106 @@ func runCombine(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	inventory, err := media.NewInventory(cmd.Context(), client, cfg.OriginalMediaDir())
+	origMediaDir := cfg.OriginalMediaDir()
+	procMediaDir := cfg.ProcessedMediaDir()
+
+	inventory, err := media.NewInventory(ctx, client, origMediaDir)
 	if err != nil {
 		return err
 	}
 
+	groupBy := cfg.Group.By
 	keepOriginal, _ := cmd.Flags().GetBool("keep-original")
 
-	switch cfg.Group.By {
+	fmt.Printf("TESTING groupBy: %q, keepOriginal: %t\n", groupBy, keepOriginal)
+
+	opts := combineOptions{
+		logger:       logger,
+		client:       client,
+		origMediaDir: origMediaDir,
+		procMediaDir: procMediaDir,
+		inventory:    inventory,
+		groupBy:      groupBy,
+		keepOriginal: keepOriginal,
+	}
+
+	switch groupBy {
 	case "media-id":
-		return combineByMediaID(cmd.Context(), logger, cfg, inventory, keepOriginal)
+		return combineByMediaID(ctx, &opts)
 	case "date":
-		return combineByDate(cmd.Context(), logger, cfg, inventory, keepOriginal)
+		return combineByDate(ctx, &opts)
 	default:
-		return fmt.Errorf("invalid group-by option: %s", cfg.Group.By)
+		return fmt.Errorf("invalid group-by option: %s", groupBy)
 	}
 }
 
-func combineByMediaID(ctx context.Context, logger *slog.Logger, cfg *config.Config, inventory *media.Inventory, keepOriginal bool) error {
-	mediaIDs := inventory.MediaIDs()
+func combineByMediaID(ctx context.Context, opts *combineOptions) error {
+	mediaIDs := opts.inventory.MediaIDs()
 	if len(mediaIDs) == 0 {
-		logger.Debug("no Media IDs found to combine")
+		opts.logger.Debug("no Media IDs found to combine")
 		return nil
 	}
 
 	for _, mediaID := range mediaIDs {
-		filtered, err := inventory.FilterByMediaID(mediaID)
+		filtered, err := opts.inventory.FilterByMediaID(mediaID)
 		if err != nil {
 			return err
 		}
 
-		logger.Debug("combining files", "media-id", mediaID)
+		opts.logger.Debug("combining files", "media-id", mediaID)
 
-		if err := combineFiles(ctx, logger, cfg, filtered, keepOriginal); err != nil {
+		if err := combineFiles(ctx, filtered, opts); err != nil {
 			return fmt.Errorf("combining by media ID %d: %w", mediaID, err)
 		}
 	}
 	return nil
 }
 
-func combineByDate(ctx context.Context, logger *slog.Logger, cfg *config.Config, inventory *media.Inventory, keepOriginal bool) error {
-	dates := inventory.UniqueDates()
+func combineByDate(ctx context.Context, opts *combineOptions) error {
+	dates := opts.inventory.UniqueDates()
 	if len(dates) == 0 {
-		logger.Debug("no dates found to combine")
+		opts.logger.Debug("no dates found to combine")
 		return nil
 	}
 
 	for _, date := range dates {
-		filtered, err := inventory.FilterByDate(date)
+		filtered, err := opts.inventory.FilterByDate(date)
 		if err != nil {
 			return err
 		}
 
-		logger.Debug("combining files", "date", date.Format(time.DateOnly))
+		opts.logger.Debug("combining files", "date", date.Format(time.DateOnly))
 
-		if err := combineFiles(ctx, logger, cfg, filtered, keepOriginal); err != nil {
+		if err := combineFiles(ctx, filtered, opts); err != nil {
 			return fmt.Errorf("combining by date %s: %w", date.Format(time.DateOnly), err)
 		}
 	}
 	return nil
 }
 
-func combineFiles(ctx context.Context, logger *slog.Logger, cfg *config.Config, inv *media.Inventory, keepOriginal bool) error {
+func combineFiles(ctx context.Context, inv *media.Inventory, opts *combineOptions) error {
 	if inv.HasUnsyncedFiles() {
-		logger.Warn("skipping group; not all files have been downloaded")
+		opts.logger.Warn("skipping group; not all files have been downloaded")
 		return nil
 	}
 
-	// Build the input file list for FFmpeg.
-	inputFiles, err := buildFFmpegInputList(cfg, inv)
+	inputFiles, err := buildFFmpegInputList(inv, opts.origMediaDir)
 	if err != nil {
 		return err
 	}
 
-	outputPath, err := generateOutputPath(cfg, inv)
+	outputPath, err := generateOutputPath(inv, opts.groupBy, opts.procMediaDir)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("Output file: %s\n", fsutil.ShortenPath(outputPath))
 
-	if err := runFFmpegWithInputList(ctx, logger, cfg, inputFiles, outputPath); err != nil {
+	if err := runFFmpegWithInputList(ctx, inputFiles, outputPath, opts); err != nil {
 		return err
 	}
 
 	// Preserve the modification time from the first video.
-	if err := fsutil.SetMtime(logger, outputPath, inv.Files[0].CreatedAt); err != nil {
+	if err := fsutil.SetMtime(opts.logger, outputPath, inv.Files[0].CreatedAt); err != nil {
 		return err
 	}
 
@@ -139,14 +165,14 @@ func combineFiles(ctx context.Context, logger *slog.Logger, cfg *config.Config, 
 	}
 
 	// Delete the original files if --keep-original is not set.
-	if !keepOriginal {
+	if !opts.keepOriginal {
 		for _, file := range inv.Files {
-			path := filepath.Join(cfg.OriginalMediaDir(), file.Filename)
+			path := filepath.Join(opts.origMediaDir, file.Filename)
 			if err := os.Remove(path); err != nil {
-				logger.Error("failed to delete local file", slog.String("path", path), slog.Any("error", err))
+				opts.logger.Error("failed to delete local file", slog.String("path", path), slog.Any("error", err))
 				return err
 			}
-			logger.Info("local file deleted", slog.String("filename", file.Filename))
+			opts.logger.Info("local file deleted", slog.String("filename", file.Filename))
 		}
 	}
 
@@ -154,38 +180,38 @@ func combineFiles(ctx context.Context, logger *slog.Logger, cfg *config.Config, 
 }
 
 // buildFFmpegInputList builds the list of input files for FFmpeg and calculates total size.
-func buildFFmpegInputList(cfg *config.Config, inv *media.Inventory) ([]string, error) {
+func buildFFmpegInputList(inv *media.Inventory, mediaDir string) ([]string, error) {
 	var inputFiles []string
 	fmt.Println("Combining files:")
 	for _, file := range inv.Files {
 		fmt.Printf("  %s\n", file.Filename)
-		inputFiles = append(inputFiles, fmt.Sprintf("file '%s/%s'", cfg.OriginalMediaDir(), file.Filename))
+		inputFiles = append(inputFiles, fmt.Sprintf("file '%s/%s'", mediaDir, file.Filename))
 	}
 	return inputFiles, nil
 }
 
 // generateOutputPath determines a unique output file path based on the grouping method.
-func generateOutputPath(cfg *config.Config, inv *media.Inventory) (string, error) {
+func generateOutputPath(inv *media.Inventory, groupBy string, mediaDir string) (string, error) {
 	var outputFilename string
 
-	switch cfg.Group.By {
+	switch groupBy {
 	case "media-id":
 		firstFile := gopro.ParseFilename(inv.Files[0].Filename)
 		outputFilename = fmt.Sprintf("gopro-%04d.mp4", firstFile.MediaID)
 	case "date":
 		outputFilename = fmt.Sprintf("daily-%s.mp4", inv.Files[0].CreatedAt.Format(time.DateOnly))
 	default:
-		return "", fmt.Errorf("invalid group-by option: %s", cfg.Group.By)
+		return "", fmt.Errorf("invalid group-by option: %s", groupBy)
 	}
 
-	fullPath := filepath.Join(cfg.ProcessedMediaDir(), outputFilename)
+	fullPath := filepath.Join(mediaDir, outputFilename)
 	return fsutil.GenerateUniqueFilename(fullPath)
 }
 
 // runFFmpegWithInputList creates a temp file list, and executes FFmpeg.
-func runFFmpegWithInputList(ctx context.Context, logger *slog.Logger, cfg *config.Config, inputFiles []string, outputFilePath string) error {
+func runFFmpegWithInputList(ctx context.Context, inputFiles []string, outputFilePath string, opts *combineOptions) error {
 	// Ensure the output directory exists before running FFmpeg.
-	if err := os.MkdirAll(outputFilePath, 0o750); err != nil {
+	if err := os.MkdirAll(filepath.Dir(outputFilePath), 0o750); err != nil {
 		return fmt.Errorf("creating output directory: %w", err)
 	}
 
@@ -200,10 +226,10 @@ func runFFmpegWithInputList(ctx context.Context, logger *slog.Logger, cfg *confi
 		return fmt.Errorf("writing to temp file: %w", err)
 	}
 
-	return runFFmpeg(ctx, logger, cfg, tmpFile.Name(), outputFilePath)
+	return runFFmpeg(ctx, tmpFile.Name(), outputFilePath, opts)
 }
 
-func runFFmpeg(ctx context.Context, logger *slog.Logger, cfg *config.Config, inputFileList, outputFilePath string) error {
+func runFFmpeg(ctx context.Context, inputFileList, outputFilePath string, opts *combineOptions) error {
 	cmd := exec.CommandContext(
 		ctx,
 		"ffmpeg",
@@ -216,17 +242,17 @@ func runFFmpeg(ctx context.Context, logger *slog.Logger, cfg *config.Config, inp
 
 	var stdErrBuff strings.Builder
 
-	// Only show FFmpeg output if log level is "debug" or higher.
-	if cfg.Log.Level == "debug" {
-		cmd.Stdout = os.Stdout
+	// Suppress ffmpeg output unless debugging is enabled.
+	if opts.logger.Enabled(ctx, slog.LevelDebug) {
 		cmd.Stderr = os.Stderr
 	} else {
 		cmd.Stderr = &stdErrBuff
 	}
 
 	if err := cmd.Run(); err != nil {
-		if cfg.Log.Level != "debug" {
-			logger.Error(stdErrBuff.String())
+		// If debugging is off, print any captured stderr logs on failure.
+		if !opts.logger.Enabled(ctx, slog.LevelDebug) {
+			opts.logger.Error(stdErrBuff.String())
 		}
 		return fmt.Errorf("running ffmpeg: %w", err)
 	}

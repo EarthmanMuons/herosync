@@ -21,6 +21,8 @@ func newStatusCmd() *cobra.Command {
 
 // runStatus is the entry point for the "status" subcommand.
 func runStatus(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+
 	logger, cfg, err := parseConfigAndLogger(cmd)
 	if err != nil {
 		return err
@@ -31,12 +33,12 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	hw, err := client.GetHardwareInfo(cmd.Context())
+	hw, err := client.GetHardwareInfo(ctx)
 	if err != nil {
 		return err
 	}
 
-	cs, err := client.GetCameraState(cmd.Context())
+	cs, err := client.GetCameraState(ctx)
 	if err != nil {
 		return err
 	}

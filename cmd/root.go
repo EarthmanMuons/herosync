@@ -124,7 +124,7 @@ func configFile(cmd *cobra.Command) (path string) {
 // collectFlagOverrides extracts flag values for config overrides.
 func collectFlagOverrides(cmd *cobra.Command) map[string]any {
 	flags := make(map[string]any)
-	cmd.PersistentFlags().Visit(func(f *pflag.Flag) {
+	cmd.Flags().Visit(func(f *pflag.Flag) {
 		flags[f.Name] = f.Value.String()
 	})
 	return flags
