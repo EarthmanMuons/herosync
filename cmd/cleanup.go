@@ -137,8 +137,6 @@ func shouldCleanup(file *media.File, remote, local bool) (deleteRemote bool, del
 	if file.Status == media.InSync {
 		if !remote && !local {
 			return true, false // default behavior: delete remote, keep local
-		} else if !remote && local {
-			return false, true // preserve remote file, delete local version only
 		}
 		return remote, local // follow explicit flag settings
 	}
