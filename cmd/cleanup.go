@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
@@ -8,10 +9,18 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/EarthmanMuons/herosync/config"
 	"github.com/EarthmanMuons/herosync/internal/gopro"
 	"github.com/EarthmanMuons/herosync/internal/media"
 )
+
+type cleanupOptions struct {
+	logger    *slog.Logger
+	client    *gopro.Client
+	outputDir string
+	inventory *media.Inventory
+	remote    bool
+	local     bool
+}
 
 // newCleanupCmd constructs the "cleanup" subcommand.
 func newCleanupCmd() *cobra.Command {
@@ -47,6 +56,8 @@ affected.`,
 
 // runCleanup is the entry point for the "cleanup" subcommand.
 func runCleanup(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+
 	logger, cfg, err := parseConfigAndLogger(cmd)
 	if err != nil {
 		return err
@@ -57,12 +68,12 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	inventory, err := media.NewInventory(cmd.Context(), client, cfg.OriginalMediaDir())
+	outputDir := cfg.OriginalMediaDir()
+
+	inventory, err := media.NewInventory(ctx, client, outputDir)
 	if err != nil {
 		return err
 	}
-
-	// Apply filename filtering if any were provided.
 	inventory, err = inventory.FilterByFilename(args)
 	if err != nil {
 		return err
@@ -71,40 +82,49 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 	remote, _ := cmd.Flags().GetBool("remote")
 	local, _ := cmd.Flags().GetBool("local")
 
-	return cleanupInventory(cmd, logger, client, cfg, inventory, remote, local)
+	opts := cleanupOptions{
+		logger:    logger,
+		client:    client,
+		outputDir: outputDir,
+		inventory: inventory,
+		remote:    remote,
+		local:     local,
+	}
+
+	return cleanupInventory(ctx, &opts)
 }
 
 // cleanupInventory loops through the inventory and deletes applicable files.
-func cleanupInventory(cmd *cobra.Command, logger *slog.Logger, client *gopro.Client, cfg *config.Config, inventory *media.Inventory, remote, local bool) error {
-	for _, file := range inventory.Files {
-		if err := cleanupFile(cmd, logger, client, cfg, file, remote, local); err != nil {
-			logger.Error("cleanup failed", slog.String("filename", file.Filename), slog.Any("error", err))
+func cleanupInventory(ctx context.Context, opts *cleanupOptions) error {
+	for _, file := range opts.inventory.Files {
+		if err := cleanupFile(ctx, &file, opts); err != nil {
+			opts.logger.Error("cleanup failed", slog.String("filename", file.Filename), slog.Any("error", err))
 		}
 	}
 	return nil
 }
 
 // cleanupFile deletes a single file according to the specified cleanup rules.
-func cleanupFile(cmd *cobra.Command, logger *slog.Logger, client *gopro.Client, cfg *config.Config, file media.File, remote, local bool) error {
+func cleanupFile(ctx context.Context, file *media.File, opts *cleanupOptions) error {
 	// Determine whether we should delete remote and/or local versions.
-	deleteRemote, deleteLocal := shouldCleanup(file, remote, local)
+	deleteRemote, deleteLocal := shouldCleanup(file, opts.remote, opts.local)
 
 	if deleteRemote {
 		remotePath := fmt.Sprintf("%s/%s", file.Directory, file.Filename)
-		logger.Info("deleting remote file", slog.String("path", remotePath))
-		if err := client.DeleteSingleMediaFile(cmd.Context(), remotePath); err != nil {
-			logger.Error("failed to delete remote file", slog.String("path", remotePath), slog.Any("error", err))
+		opts.logger.Info("deleting remote file", slog.String("path", remotePath))
+		if err := opts.client.DeleteSingleMediaFile(ctx, remotePath); err != nil {
+			opts.logger.Error("failed to delete remote file", slog.String("path", remotePath), slog.Any("error", err))
 		}
 	}
 
 	if deleteLocal {
-		localPath := filepath.Join(cfg.OriginalMediaDir(), file.Filename)
-		logger.Info("deleting local file", slog.String("path", localPath))
+		localPath := filepath.Join(opts.outputDir, file.Filename)
+		opts.logger.Info("deleting local file", slog.String("path", localPath))
 		if err := os.Remove(localPath); err != nil {
 			if os.IsNotExist(err) {
-				logger.Warn("local file does not exist", slog.String("path", localPath))
+				opts.logger.Warn("local file does not exist", slog.String("path", localPath))
 			} else {
-				logger.Error("failed to delete local file", slog.String("path", localPath), slog.Any("error", err))
+				opts.logger.Error("failed to delete local file", slog.String("path", localPath), slog.Any("error", err))
 			}
 		}
 	}
@@ -113,7 +133,7 @@ func cleanupFile(cmd *cobra.Command, logger *slog.Logger, client *gopro.Client, 
 }
 
 // shouldCleanup determines whether a file should be deleted based on the flags.
-func shouldCleanup(file media.File, remote, local bool) (deleteRemote bool, deleteLocal bool) {
+func shouldCleanup(file *media.File, remote, local bool) (deleteRemote bool, deleteLocal bool) {
 	if file.Status == media.InSync {
 		if !remote && !local {
 			return true, false // default behavior: delete remote, keep local
