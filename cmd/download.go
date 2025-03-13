@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -83,8 +84,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 
 // downloadInventory handles downloading files based on their sync status.
 func downloadInventory(ctx context.Context, opts downloadOptions) error {
-	var encounteredError error
-
+	var errs []error
 	for _, file := range opts.inventory.Files {
 		shouldDownload := shouldDownload(file, opts.force)
 		if !shouldDownload {
@@ -96,11 +96,10 @@ func downloadInventory(ctx context.Context, opts downloadOptions) error {
 
 		if err := downloadAndVerify(ctx, &file, opts); err != nil {
 			opts.logger.Error("failed to download", slog.String("filename", file.Filename), slog.Any("error", err))
-			encounteredError = err // capture the error but continue processing remaining files
+			errs = append(errs, err)
 		}
 	}
-
-	return encounteredError
+	return errors.Join(errs...)
 }
 
 // shouldDownload determines whether a file should be downloaded.
