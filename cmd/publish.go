@@ -19,8 +19,8 @@ func newPublishCmd() *cobra.Command {
 
 // runPublish is the entry point for the "publish" subcommand.
 func runPublish(cmd *cobra.Command, args []string) error {
-	// logger, cfg, err := parseConfigAndLogger(cmd)
-	logger, _, err := parseConfigAndLogger(cmd)
+	// ctx, logger, cfg, err := contextLoggerConfig(cmd)
+	_, logger, _, err := contextLoggerConfig(cmd)
 	if err != nil {
 		return err
 	}

@@ -44,9 +44,7 @@ If one or more [FILENAME] arguments are provided, only matching files will be af
 
 // runDownload is the entry point for the "download" subcommand.
 func runDownload(cmd *cobra.Command, args []string) error {
-	ctx := cmd.Context()
-
-	logger, cfg, err := parseConfigAndLogger(cmd)
+	ctx, logger, cfg, err := contextLoggerConfig(cmd)
 	if err != nil {
 		return err
 	}

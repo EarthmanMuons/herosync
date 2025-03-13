@@ -21,9 +21,7 @@ func newStatusCmd() *cobra.Command {
 
 // runStatus is the entry point for the "status" subcommand.
 func runStatus(cmd *cobra.Command, args []string) error {
-	ctx := cmd.Context()
-
-	logger, cfg, err := parseConfigAndLogger(cmd)
+	ctx, logger, cfg, err := contextLoggerConfig(cmd)
 	if err != nil {
 		return err
 	}

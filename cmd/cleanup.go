@@ -56,9 +56,7 @@ affected.`,
 
 // runCleanup is the entry point for the "cleanup" subcommand.
 func runCleanup(cmd *cobra.Command, args []string) error {
-	ctx := cmd.Context()
-
-	logger, cfg, err := parseConfigAndLogger(cmd)
+	ctx, logger, cfg, err := contextLoggerConfig(cmd)
 	if err != nil {
 		return err
 	}

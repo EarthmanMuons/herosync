@@ -19,8 +19,8 @@ func newYOLOCmd() *cobra.Command {
 
 // runYOLO is the entry point for the "yolo" subcommand.
 func runYOLO(cmd *cobra.Command, args []string) error {
-	// logger, cfg, err := parseConfigAndLogger(cmd)
-	logger, _, err := parseConfigAndLogger(cmd)
+	// ctx, logger, cfg, err := contextLoggerConfig(cmd)
+	_, logger, _, err := contextLoggerConfig(cmd)
 	if err != nil {
 		return err
 	}

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"log/slog"
@@ -146,21 +147,22 @@ func initLogger(level string) *slog.Logger {
 	return slog.New(handler)
 }
 
-// parseConfigAndLogger retrieves the runtime configuration and logger.
-func parseConfigAndLogger(cmd *cobra.Command) (*slog.Logger, *config.Config, error) {
+// contextLoggerConfig retrieves the runtime context, configuration, and logger.
+func contextLoggerConfig(cmd *cobra.Command) (context.Context, *slog.Logger, *config.Config, error) {
+	ctx := cmd.Context()
 	logger := slog.Default()
 
-	// Now that subcommands have been parsed, apply any subcommand-specific flags.
+	// Apply subcommand-specific flags.
 	flags := collectFlagOverrides(cmd)
 	if err := config.LoadFlags(flags); err != nil {
-		return nil, nil, fmt.Errorf("applying subcommand flags: %w", err)
+		return nil, nil, nil, fmt.Errorf("applying subcommand flags: %w", err)
 	}
 
 	// Retrieve the fully merged configuration.
 	cfg, err := config.Get()
 	if err != nil {
-		return nil, nil, fmt.Errorf("loading configuration: %w", err)
+		return nil, nil, nil, fmt.Errorf("loading configuration: %w", err)
 	}
 
-	return logger, cfg, nil
+	return ctx, logger, cfg, nil
 }
