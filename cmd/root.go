@@ -36,9 +36,9 @@ func NewRootCmd() *cobra.Command {
 	rootCmd.AddCommand(newListCmd())
 	rootCmd.AddCommand(newDownloadCmd())
 	rootCmd.AddCommand(newCombineCmd())
-	rootCmd.AddCommand(publishCmd)
+	rootCmd.AddCommand(newPublishCmd())
 	rootCmd.AddCommand(newCleanupCmd())
-	rootCmd.AddCommand(yoloCmd)
+	rootCmd.AddCommand(newYOLOCmd())
 
 	addGlobalFlags(rootCmd)
 

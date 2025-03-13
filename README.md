@@ -12,6 +12,8 @@ with detailed status reporting.
 ## Usage
 
 ```
+Download, combine, and publish GoPro videos with ease
+
 Usage:
   herosync [command]
 
@@ -19,31 +21,28 @@ Available Commands:
   status      Display GoPro hardware and storage info
   list        Show media inventory and sync state details
   download    Fetch new media files from the GoPro
-  combine     Merge video clips into full recordings
+  combine     Merge grouped raw clips into final recordings
   publish     Upload processed videos to YouTube
   cleanup     Delete transferred media from GoPro storage
-  yolo        Hands-free: download, combine, publish, cleanup
+  yolo        Hands-free sync: download, combine, publish
   help        Help about any command
 
 Flags:
-      --config-file string    configuration file path
+  -c, --config-file string    Configuration file path
                               [env: HEROSYNC_CONFIG_FILE]
                               [default: ~/Library/Application Support/herosync/config.toml]
 
       --gopro-host string     GoPro URL host (IP, hostname:port, "" for mDNS discovery)
                               [env: HEROSYNC_GOPRO_HOST]
                               [default: ""]
-
       --gopro-scheme string   GoPro URL scheme (http, https)
                               [env: HEROSYNC_GOPRO_SCHEME]
                               [default: http]
-
   -h, --help                  help for herosync
-  -l, --log-level string      logging level (debug, info, warn, error)
+  -l, --log-level string      Logging level (debug, info, warn, error)
                               [env: HEROSYNC_LOG_LEVEL]
                               [default: info]
-
-  -o, --output-dir string     output directory path
+  -o, --output-dir string     Output directory path
                               [env: HEROSYNC_OUTPUT_DIR]
                               [default: ~/Library/Application Support/herosync/media/]
 
