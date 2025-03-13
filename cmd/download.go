@@ -13,6 +13,15 @@ import (
 	"github.com/EarthmanMuons/herosync/internal/media"
 )
 
+type downloadOptions struct {
+	logger       *slog.Logger
+	outputDir    string
+	client       *gopro.Client
+	inventory    *media.Inventory
+	force        bool
+	keepOriginal bool
+}
+
 // newDownloadCmd constructs the "download" subcommand.
 func newDownloadCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -34,22 +43,24 @@ If one or more [FILENAME] arguments are provided, only matching files will be af
 
 // runDownload is the entry point for the "download" subcommand.
 func runDownload(cmd *cobra.Command, args []string) error {
+	ctx := cmd.Context()
+
 	logger, cfg, err := parseConfigAndLogger(cmd)
 	if err != nil {
 		return err
 	}
+
+	outputDir := cfg.OriginalMediaDir()
 
 	client, err := gopro.NewClient(logger, cfg.GoPro.Scheme, cfg.GoPro.Host)
 	if err != nil {
 		return err
 	}
 
-	inventory, err := media.NewInventory(cmd.Context(), client, cfg.OriginalMediaDir())
+	inventory, err := media.NewInventory(ctx, client, outputDir)
 	if err != nil {
 		return err
 	}
-
-	// Apply filename filtering if any were provided.
 	inventory, err = inventory.FilterByFilename(args)
 	if err != nil {
 		return err
@@ -58,24 +69,33 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool("force")
 	keepOriginal, _ := cmd.Flags().GetBool("keep-original")
 
-	return downloadInventory(cmd.Context(), logger, client, inventory, cfg.OriginalMediaDir(), force, keepOriginal)
+	opts := downloadOptions{
+		logger:       logger,
+		outputDir:    outputDir,
+		client:       client,
+		inventory:    inventory,
+		force:        force,
+		keepOriginal: keepOriginal,
+	}
+
+	return downloadInventory(ctx, opts)
 }
 
 // downloadInventory handles downloading files based on their sync status.
-func downloadInventory(ctx context.Context, logger *slog.Logger, client *gopro.Client, inventory *media.Inventory, outputDir string, force, keepOriginal bool) error {
+func downloadInventory(ctx context.Context, opts downloadOptions) error {
 	var encounteredError error
 
-	for _, file := range inventory.Files {
-		shouldDownload := shouldDownload(file, force)
+	for _, file := range opts.inventory.Files {
+		shouldDownload := shouldDownload(file, opts.force)
 		if !shouldDownload {
-			logger.Debug("skipping file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
+			opts.logger.Debug("skipping file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
 			continue
 		}
 
-		logger.Info("downloading file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
+		opts.logger.Info("downloading file", slog.String("filename", file.Filename), slog.String("status", file.Status.String()))
 
-		if err := downloadAndVerify(ctx, logger, client, &file, outputDir, keepOriginal); err != nil {
-			logger.Error("failed to download", slog.String("filename", file.Filename), slog.Any("error", err))
+		if err := downloadAndVerify(ctx, &file, opts); err != nil {
+			opts.logger.Error("failed to download", slog.String("filename", file.Filename), slog.Any("error", err))
 			encounteredError = err // capture the error but continue processing remaining files
 		}
 	}
@@ -96,16 +116,16 @@ func shouldDownload(file media.File, force bool) bool {
 }
 
 // downloadAndVerify handles downloading a single file and post-download checks.
-func downloadAndVerify(ctx context.Context, logger *slog.Logger, client *gopro.Client, file *media.File, outputDir string, keepOriginal bool) error {
-	downloadPath := filepath.Join(outputDir, file.Filename)
+func downloadAndVerify(ctx context.Context, file *media.File, opts downloadOptions) error {
+	downloadPath := filepath.Join(opts.outputDir, file.Filename)
 
-	if err := client.DownloadMediaFile(ctx, file.Directory, file.Filename, outputDir); err != nil {
+	if err := opts.client.DownloadMediaFile(ctx, file.Directory, file.Filename, opts.outputDir); err != nil {
 		return fmt.Errorf("failed to download file %s: %w", file.Filename, err)
 	}
-	logger.Info("download complete", slog.String("filename", file.Filename))
+	opts.logger.Info("download complete", slog.String("filename", file.Filename))
 
 	// Preserve the modification time.
-	if err := fsutil.SetMtime(logger, downloadPath, file.CreatedAt); err != nil {
+	if err := fsutil.SetMtime(opts.logger, downloadPath, file.CreatedAt); err != nil {
 		return err
 	}
 
@@ -115,13 +135,13 @@ func downloadAndVerify(ctx context.Context, logger *slog.Logger, client *gopro.C
 	}
 
 	// Delete the original remote file if --keep-original is not set.
-	if !keepOriginal {
+	if !opts.keepOriginal {
 		remotePath := fmt.Sprintf("%s/%s", file.Directory, file.Filename)
-		if err := client.DeleteSingleMediaFile(ctx, remotePath); err != nil {
-			logger.Error("failed to delete remote file", slog.String("path", remotePath), slog.Any("error", err))
+		if err := opts.client.DeleteSingleMediaFile(ctx, remotePath); err != nil {
+			opts.logger.Error("failed to delete remote file", slog.String("path", remotePath), slog.Any("error", err))
 			return err
 		}
-		logger.Debug("remote file deleted", slog.String("filename", file.Filename))
+		opts.logger.Debug("remote file deleted", slog.String("filename", file.Filename))
 	}
 
 	return nil
