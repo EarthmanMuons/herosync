@@ -27,7 +27,7 @@ If one or more [FILENAME] arguments are provided, only matching files will be af
 	}
 
 	cmd.Flags().BoolP("force", "f", false, "force re-download of existing files")
-	cmd.Flags().BoolP("keep-original", "k", false, "prevent cleaning remote files after download")
+	cmd.Flags().BoolP("keep-original", "k", false, "prevent deleting remote files after downloading")
 
 	return cmd
 }
@@ -44,7 +44,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize GoPro client: %w", err)
 	}
 
-	inventory, err := media.NewInventory(cmd.Context(), client, cfg.RawMediaDir())
+	inventory, err := media.NewInventory(cmd.Context(), client, cfg.OriginalMediaDir())
 	if err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool("force")
 	keepOriginal, _ := cmd.Flags().GetBool("keep-original")
 
-	return downloadInventory(cmd.Context(), logger, client, inventory, cfg.RawMediaDir(), force, keepOriginal)
+	return downloadInventory(cmd.Context(), logger, client, inventory, cfg.OriginalMediaDir(), force, keepOriginal)
 }
 
 // downloadInventory handles downloading files based on their sync status.

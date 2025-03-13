@@ -27,10 +27,10 @@ By default, only files that have been successfully transferred to local storage
 USE FLAGS WITH CAUTION!
 
 * --remote deletes all GoPro files regardless of sync status.
-* --local deletes all local files in the "raw" output subdirectory.
+* --local deletes all local files in the "original" output subdirectory.
 
 Combining --remote and --local will delete everything from both GoPro storage
-and local raw storage. The "processed" output subdirectory will remain
+and local original storage. The "processed" output subdirectory will remain
 untouched.
 
 If one or more [FILENAME] arguments are provided, only matching files will be
@@ -57,7 +57,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize GoPro client: %w", err)
 	}
 
-	inventory, err := media.NewInventory(cmd.Context(), client, cfg.RawMediaDir())
+	inventory, err := media.NewInventory(cmd.Context(), client, cfg.OriginalMediaDir())
 	if err != nil {
 		return err
 	}
@@ -98,7 +98,7 @@ func cleanupFile(cmd *cobra.Command, logger *slog.Logger, client *gopro.Client, 
 	}
 
 	if deleteLocal {
-		localPath := filepath.Join(cfg.RawMediaDir(), file.Filename)
+		localPath := filepath.Join(cfg.OriginalMediaDir(), file.Filename)
 		logger.Info("deleting local file", slog.String("path", localPath))
 		if err := os.Remove(localPath); err != nil {
 			if os.IsNotExist(err) {

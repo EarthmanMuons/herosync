@@ -34,7 +34,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize GoPro client: %w", err)
 	}
 
-	inventory, err := media.NewInventory(cmd.Context(), client, cfg.RawMediaDir())
+	inventory, err := media.NewInventory(cmd.Context(), client, cfg.OriginalMediaDir())
 	if err != nil {
 		return err
 	}

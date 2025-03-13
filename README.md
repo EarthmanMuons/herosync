@@ -21,7 +21,7 @@ Available Commands:
   status      Display GoPro hardware and storage info
   list        Show media inventory and sync state details
   download    Fetch new media files from the GoPro
-  combine     Merge grouped raw clips into final recordings
+  combine     Merge original media into processed videos
   publish     Upload processed videos to YouTube
   cleanup     Delete transferred media from GoPro storage
   yolo        Hands-free sync: download, combine, publish

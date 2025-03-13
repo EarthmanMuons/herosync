@@ -23,12 +23,12 @@ func newCombineCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "combine",
 		Aliases: []string{"merge"},
-		Short:   "Merge grouped raw clips into final recordings",
+		Short:   "Merge original media into processed videos",
 		RunE:    runCombine,
 	}
 
 	cmd.Flags().String("group-by", "", "group videos by (media-id, date)")
-	cmd.Flags().BoolP("keep-original", "k", false, "prevent deletion of raw files after combining")
+	cmd.Flags().BoolP("keep-original", "k", false, "prevent deleting original files after combining")
 
 	return cmd
 }
@@ -45,7 +45,7 @@ func runCombine(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to initialize GoPro client: %w", err)
 	}
 
-	inventory, err := media.NewInventory(cmd.Context(), client, cfg.RawMediaDir())
+	inventory, err := media.NewInventory(cmd.Context(), client, cfg.OriginalMediaDir())
 	if err != nil {
 		return err
 	}
@@ -141,7 +141,7 @@ func combineFiles(ctx context.Context, logger *slog.Logger, cfg *config.Config, 
 	// Delete the original files if --keep-original is not set.
 	if !keepOriginal {
 		for _, file := range inv.Files {
-			path := filepath.Join(cfg.RawMediaDir(), file.Filename)
+			path := filepath.Join(cfg.OriginalMediaDir(), file.Filename)
 			if err := os.Remove(path); err != nil {
 				logger.Error("failed to delete local file", slog.String("path", path), slog.Any("error", err))
 				return err
@@ -159,7 +159,7 @@ func buildFFmpegInputList(cfg *config.Config, inv *media.Inventory) ([]string, e
 	fmt.Println("Combining files:")
 	for _, file := range inv.Files {
 		fmt.Printf("  %s\n", file.Filename)
-		inputFiles = append(inputFiles, fmt.Sprintf("file '%s/%s'", cfg.RawMediaDir(), file.Filename))
+		inputFiles = append(inputFiles, fmt.Sprintf("file '%s/%s'", cfg.OriginalMediaDir(), file.Filename))
 	}
 	return inputFiles, nil
 }

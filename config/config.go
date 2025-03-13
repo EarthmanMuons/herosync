@@ -134,9 +134,9 @@ func validateConfig(cfg *Config) error {
 	return nil
 }
 
-// RawMediaDir returns the full path to the raw media directory.
-func (c *Config) RawMediaDir() string {
-	return filepath.Join(c.Output.Dir, "raw")
+// OriginalMediaDir returns the full path to the original media directory.
+func (c *Config) OriginalMediaDir() string {
+	return filepath.Join(c.Output.Dir, "original")
 }
 
 // ProcessedMediaDir returns the full path to the processed media directory.
