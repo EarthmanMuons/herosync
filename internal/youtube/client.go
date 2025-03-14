@@ -28,13 +28,13 @@ const (
 // GetClient creates an HTTP client using OAuth2 with the given scope.
 // It reads client_secret.json, and if no cached token exists,
 // it launches a web server for the OAuth2 flow.
-func GetClient(ctx context.Context, file string, scope string) *http.Client {
+func GetClient(ctx context.Context, file string, scopes []string) *http.Client {
 	jsonKey, err := os.ReadFile(file)
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
 	}
 
-	config, err := google.ConfigFromJSON(jsonKey, scope)
+	config, err := google.ConfigFromJSON(jsonKey, scopes...)
 	if err != nil {
 		log.Fatalf("Unable to parse client secret file to config: %v", err)
 	}

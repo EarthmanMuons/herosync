@@ -30,25 +30,28 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	scope := "https://www.googleapis.com/auth/youtube.readonly"
+	scopes := []string{
+		"https://www.googleapis.com/auth/youtube.readonly",
+		"https://www.googleapis.com/auth/youtube.upload",
+	}
 
-	logger.Info("creating youtube client", slog.String("scope", scope))
+	logger.Info("creating youtube client", slog.Any("scopes", scopes))
 
 	clientFile := defaultClientSecretPath()
-	client := yt.GetClient(ctx, clientFile, scope)
+	client := yt.GetClient(ctx, clientFile, scopes)
 
 	svc, err := youtube.New(client)
 	if err != nil {
 		return fmt.Errorf("unable to create YouTube service: %v", err)
 	}
 
-	call := svc.Channels.List([]string{"mine", "snippet"}).Mine(true)
+	call := svc.Channels.List([]string{"snippet"}).Mine(true)
 	resp, err := call.Do()
 	if err != nil {
 		return fmt.Errorf("making API call: %v", err)
 	}
 
-	fmt.Printf("Channel Name: %v\n", resp.Items[0].Snippet.Title)
+	fmt.Printf("Channel: %v\n", resp.Items[0].Snippet.Title)
 
 	return nil
 }
