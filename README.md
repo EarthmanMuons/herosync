@@ -21,8 +21,8 @@ Available Commands:
   status      Display GoPro hardware and storage info
   list        Show media inventory and sync state details
   download    Fetch new media files from the GoPro
-  combine     Merge original media into processed videos
-  publish     Upload processed videos to YouTube
+  combine     Merge incoming media into outgoing videos
+  publish     Upload outgoing videos to YouTube
   cleanup     Delete transferred media from GoPro storage
   yolo        Hands-free sync: download, combine, publish
   help        Help about any command
@@ -46,8 +46,8 @@ Flags:
                               [env: HEROSYNC_LOG_LEVEL]
                               [default: info]
 
-  -o, --output-dir string     output directory path
-                              [env: HEROSYNC_OUTPUT_DIR]
+  -m, --media-dir string      parent directory for media storage
+                              [env: HEROSYNC_MEDIA_DIR]
                               [default: ~/Library/Application Support/herosync/media]
 
 Use "herosync [command] --help" for more information about a command.

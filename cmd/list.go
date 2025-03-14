@@ -34,9 +34,9 @@ func runList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	outputDir := cfg.OriginalMediaDir()
+	incomingDir := cfg.IncomingMediaDir()
 
-	inventory, err := media.NewInventory(ctx, client, outputDir)
+	inventory, err := media.NewInventory(ctx, client, incomingDir)
 	if err != nil {
 		return err
 	}
@@ -50,7 +50,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// printInventory outputs the inventory in a human-readable format.
+// printInventory prints the inventory in a human-readable format.
 func printInventory(inventory *media.Inventory) {
 	for _, file := range inventory.Files {
 		createdAt := file.CreatedAt.Format(time.DateTime)

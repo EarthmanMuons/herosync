@@ -29,9 +29,9 @@ type Config struct {
 	Log struct {
 		Level string `koanf:"level"`
 	} `koanf:"log"`
-	Output struct {
+	Media struct {
 		Dir string `koanf:"dir"`
-	} `koanf:"output"`
+	} `koanf:"media"`
 }
 
 // DefaultConfigPath returns the default config file path following XDG specification.
@@ -39,8 +39,8 @@ func DefaultConfigPath() string {
 	return filepath.Join(xdg.ConfigHome, "herosync", "config.toml")
 }
 
-// DefaultOutputDir returns the default output directory following XDG specification.
-func DefaultOutputDir() string {
+// DefaultMediaDir returns the default media files directory following XDG specification.
+func DefaultMediaDir() string {
 	return filepath.Join(xdg.DataHome, "herosync", "media")
 }
 
@@ -74,7 +74,7 @@ func loadDefaults() error {
 		"gopro.scheme": "http",
 		"group.by":     "media-id",
 		"log.level":    "info",
-		"output.dir":   DefaultOutputDir(),
+		"media.dir":    DefaultMediaDir(),
 	}
 	return k.Load(confmap.Provider(defaults, "."), nil)
 }
@@ -134,12 +134,12 @@ func validateConfig(cfg *Config) error {
 	return nil
 }
 
-// OriginalMediaDir returns the full path to the original media directory.
-func (c *Config) OriginalMediaDir() string {
-	return filepath.Join(c.Output.Dir, "original")
+// IncomingMediaDir returns the full path to the incoming media directory.
+func (c *Config) IncomingMediaDir() string {
+	return filepath.Join(c.Media.Dir, "incoming")
 }
 
-// ProcessedMediaDir returns the full path to the processed media directory.
-func (c *Config) ProcessedMediaDir() string {
-	return filepath.Join(c.Output.Dir, "processed")
+// OutgoingMediaDir returns the full path to the outgoing media directory.
+func (c *Config) OutgoingMediaDir() string {
+	return filepath.Join(c.Media.Dir, "outgoing")
 }

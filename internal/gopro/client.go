@@ -163,7 +163,7 @@ func (c *Client) GetMediaList(ctx context.Context) (*MediaList, error) {
 }
 
 // Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Media/operation/OGP_DOWNLOAD_MEDIA
-func (c *Client) DownloadMediaFile(ctx context.Context, directory string, filename string, outputDir string) error {
+func (c *Client) DownloadMediaFile(ctx context.Context, directory string, filename string, downloadDir string) error {
 	relativePath := fmt.Sprintf("/videos/DCIM/%s/%s", directory, filename)
 	reqURL := c.baseURL.JoinPath(relativePath).String()
 
@@ -178,13 +178,12 @@ func (c *Client) DownloadMediaFile(ctx context.Context, directory string, filena
 		return fmt.Errorf("downloading media file: unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 	}
 
-	// Convert outputDir to an absolute path.
-	absOutputDir, err := filepath.Abs(outputDir)
+	absDownloadDir, err := filepath.Abs(downloadDir)
 	if err != nil {
-		return fmt.Errorf("getting absolute path for output directory: %w", err)
+		return fmt.Errorf("getting absolute path for download directory: %w", err)
 	}
 
-	fullLocalPath := filepath.Join(absOutputDir, filename)
+	fullLocalPath := filepath.Join(absDownloadDir, filename)
 	if err := os.MkdirAll(filepath.Dir(fullLocalPath), 0o750); err != nil {
 		return fmt.Errorf("creating directory: %w", err)
 	}

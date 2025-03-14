@@ -72,10 +72,10 @@ type Inventory struct {
 }
 
 // NewInventory creates an Inventory by comparing remote and local files.
-func NewInventory(ctx context.Context, client *gopro.Client, outputDir string) (*Inventory, error) {
-	absOutputDir, err := filepath.Abs(outputDir)
+func NewInventory(ctx context.Context, client *gopro.Client, dir string) (*Inventory, error) {
+	absDir, err := filepath.Abs(dir)
 	if err != nil {
-		return nil, fmt.Errorf("getting absolute path for output directory: %w", err)
+		return nil, fmt.Errorf("getting absolute path for directory: %w", err)
 	}
 
 	mediaList, err := client.GetMediaList(ctx)
@@ -83,7 +83,7 @@ func NewInventory(ctx context.Context, client *gopro.Client, outputDir string) (
 		return nil, err
 	}
 
-	localFiles, err := scanLocalFiles(absOutputDir)
+	localFiles, err := scanLocalFiles(absDir)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func NewInventory(ctx context.Context, client *gopro.Client, outputDir string) (
 	// Add any remaining local files (files that exist only locally).
 	for localFileName, localFileInfo := range localFiles {
 		mediaFile := File{
-			Directory: absOutputDir, // Assume no subdirectory.
+			Directory: absDir, // Assume no subdirectory.
 			Filename:  localFileName,
 			CreatedAt: localFileInfo.ModTime(), // Use mtime from local file.
 			Size:      localFileInfo.Size(),
@@ -156,7 +156,7 @@ func scanLocalFiles(dir string) (map[string]os.FileInfo, error) {
 			}
 			rel, err := filepath.Rel(dir, path)
 			if err != nil {
-				return fmt.Errorf("finding relative path of, %v, to output path, %v: %w", path, dir, err)
+				return fmt.Errorf("finding relative path of, %v, to directory, %v: %w", path, dir, err)
 			}
 			localFiles[rel] = info
 		}

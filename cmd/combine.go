@@ -20,8 +20,8 @@ import (
 type combineOptions struct {
 	logger       *slog.Logger
 	client       *gopro.Client
-	origMediaDir string
-	procMediaDir string
+	incomingDir  string
+	outgoingDir  string
 	inventory    *media.Inventory
 	groupBy      string
 	keepOriginal bool
@@ -32,7 +32,7 @@ func newCombineCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "combine",
 		Aliases: []string{"merge"},
-		Short:   "Merge original media into processed videos",
+		Short:   "Merge incoming media into outgoing videos",
 		RunE:    runCombine,
 	}
 
@@ -54,10 +54,10 @@ func runCombine(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	origMediaDir := cfg.OriginalMediaDir()
-	procMediaDir := cfg.ProcessedMediaDir()
+	incomingDir := cfg.IncomingMediaDir()
+	outgoingDir := cfg.OutgoingMediaDir()
 
-	inventory, err := media.NewInventory(ctx, client, origMediaDir)
+	inventory, err := media.NewInventory(ctx, client, incomingDir)
 	if err != nil {
 		return err
 	}
@@ -68,8 +68,8 @@ func runCombine(cmd *cobra.Command, args []string) error {
 	opts := combineOptions{
 		logger:       logger,
 		client:       client,
-		origMediaDir: origMediaDir,
-		procMediaDir: procMediaDir,
+		incomingDir:  incomingDir,
+		outgoingDir:  outgoingDir,
 		inventory:    inventory,
 		groupBy:      groupBy,
 		keepOriginal: keepOriginal,
@@ -135,12 +135,12 @@ func combineFiles(ctx context.Context, inv *media.Inventory, opts *combineOption
 		return nil
 	}
 
-	inputFiles, err := buildFFmpegInputList(inv, opts.origMediaDir)
+	inputFiles, err := buildFFmpegInputList(inv, opts.incomingDir)
 	if err != nil {
 		return err
 	}
 
-	outputPath, err := generateOutputPath(inv, opts.groupBy, opts.procMediaDir)
+	outputPath, err := generateOutputPath(inv, opts.groupBy, opts.outgoingDir)
 	if err != nil {
 		return err
 	}
@@ -163,7 +163,7 @@ func combineFiles(ctx context.Context, inv *media.Inventory, opts *combineOption
 	// Delete the original files if --keep-original is not set.
 	if !opts.keepOriginal {
 		for _, file := range inv.Files {
-			path := filepath.Join(opts.origMediaDir, file.Filename)
+			path := filepath.Join(opts.incomingDir, file.Filename)
 			if err := os.Remove(path); err != nil {
 				opts.logger.Error("failed to delete local file", slog.String("path", path), slog.Any("error", err))
 				return err

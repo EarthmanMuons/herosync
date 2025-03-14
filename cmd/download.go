@@ -17,7 +17,7 @@ import (
 type downloadOptions struct {
 	logger       *slog.Logger
 	client       *gopro.Client
-	outputDir    string
+	incomingDir  string
 	inventory    *media.Inventory
 	force        bool
 	keepOriginal bool
@@ -54,9 +54,9 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	outputDir := cfg.OriginalMediaDir()
+	incomingDir := cfg.IncomingMediaDir()
 
-	inventory, err := media.NewInventory(ctx, client, outputDir)
+	inventory, err := media.NewInventory(ctx, client, incomingDir)
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	opts := downloadOptions{
 		logger:       logger,
 		client:       client,
-		outputDir:    outputDir,
+		incomingDir:  incomingDir,
 		inventory:    inventory,
 		force:        force,
 		keepOriginal: keepOriginal,
@@ -114,9 +114,9 @@ func shouldDownload(file media.File, force bool) bool {
 
 // downloadAndVerify handles downloading a single file and post-download checks.
 func downloadAndVerify(ctx context.Context, file *media.File, opts *downloadOptions) error {
-	downloadPath := filepath.Join(opts.outputDir, file.Filename)
+	downloadPath := filepath.Join(opts.incomingDir, file.Filename)
 
-	if err := opts.client.DownloadMediaFile(ctx, file.Directory, file.Filename, opts.outputDir); err != nil {
+	if err := opts.client.DownloadMediaFile(ctx, file.Directory, file.Filename, opts.incomingDir); err != nil {
 		return fmt.Errorf("failed to download file %s: %w", file.Filename, err)
 	}
 	opts.logger.Info("download complete", slog.String("filename", file.Filename))

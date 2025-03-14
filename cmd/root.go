@@ -67,8 +67,8 @@ const (
 [env: HEROSYNC_LOG_LEVEL]
 [default: info]
 `
-	outputDirUsage = `output directory path
-[env: HEROSYNC_OUTPUT_DIR]
+	mediaDirUsage = `parent directory for media storage
+[env: HEROSYNC_MEDIA_DIR]
 [default: %s]
 `
 )
@@ -76,18 +76,18 @@ const (
 // addGlobalFlags registers global CLI flags.
 func addGlobalFlags(rootCmd *cobra.Command) {
 	defaultConfig := fsutil.ShortenPath(config.DefaultConfigPath())
-	defaultOutput := fsutil.ShortenPath(config.DefaultOutputDir())
+	defaultMedia := fsutil.ShortenPath(config.DefaultMediaDir())
 
 	rootCmd.PersistentFlags().StringP("config-file", "c", "", fmt.Sprintf(configFileUsage, defaultConfig))
 	rootCmd.PersistentFlags().String("gopro-host", "", goproHostUsage)
 	rootCmd.PersistentFlags().String("gopro-scheme", "", goproSchemeUsage)
 	rootCmd.PersistentFlags().BoolP("help", "h", false, helpUsage)
 	rootCmd.PersistentFlags().StringP("log-level", "l", "", logLevelUsage)
-	rootCmd.PersistentFlags().StringP("output-dir", "o", "", fmt.Sprintf(outputDirUsage, defaultOutput))
+	rootCmd.PersistentFlags().StringP("media-dir", "m", "", fmt.Sprintf(mediaDirUsage, defaultMedia))
 
 	// Define shell completion hints.
 	rootCmd.MarkPersistentFlagFilename("config-file", "toml")
-	rootCmd.MarkPersistentFlagDirname("output-dir")
+	rootCmd.MarkPersistentFlagDirname("media-dir")
 }
 
 // logLevel retrieves the log level from flags or config.

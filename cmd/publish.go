@@ -17,7 +17,7 @@ func newPublishCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "publish",
 		Aliases: []string{"pub"},
-		Short:   "Upload processed videos to YouTube",
+		Short:   "Upload outgoing videos to YouTube",
 		RunE:    runPublish,
 	}
 	return cmd

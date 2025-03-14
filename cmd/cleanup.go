@@ -14,12 +14,12 @@ import (
 )
 
 type cleanupOptions struct {
-	logger    *slog.Logger
-	client    *gopro.Client
-	outputDir string
-	inventory *media.Inventory
-	remote    bool
-	local     bool
+	logger      *slog.Logger
+	client      *gopro.Client
+	incomingDir string
+	inventory   *media.Inventory
+	remote      bool
+	local       bool
 }
 
 // newCleanupCmd constructs the "cleanup" subcommand.
@@ -36,10 +36,10 @@ By default, only files that have been successfully transferred to local storage
 USE FLAGS WITH CAUTION!
 
 * --remote deletes all GoPro files regardless of sync status.
-* --local deletes all local files in the "original" output subdirectory.
+* --local deletes all local files in the "incoming" media subdirectory.
 
 Combining --remote and --local will delete everything from both GoPro storage
-and local original storage. The "processed" output subdirectory will remain
+and local incoming media storage. The "outgoing" media subdirectory will remain
 untouched.
 
 If one or more [FILENAME] arguments are provided, only matching files will be
@@ -66,9 +66,9 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	outputDir := cfg.OriginalMediaDir()
+	incomingDir := cfg.IncomingMediaDir()
 
-	inventory, err := media.NewInventory(ctx, client, outputDir)
+	inventory, err := media.NewInventory(ctx, client, incomingDir)
 	if err != nil {
 		return err
 	}
@@ -81,12 +81,12 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 	local, _ := cmd.Flags().GetBool("local")
 
 	opts := cleanupOptions{
-		logger:    logger,
-		client:    client,
-		outputDir: outputDir,
-		inventory: inventory,
-		remote:    remote,
-		local:     local,
+		logger:      logger,
+		client:      client,
+		incomingDir: incomingDir,
+		inventory:   inventory,
+		remote:      remote,
+		local:       local,
 	}
 
 	return cleanupInventory(ctx, &opts)
@@ -116,7 +116,7 @@ func cleanupFile(ctx context.Context, file *media.File, opts *cleanupOptions) er
 	}
 
 	if deleteLocal {
-		localPath := filepath.Join(opts.outputDir, file.Filename)
+		localPath := filepath.Join(opts.incomingDir, file.Filename)
 		opts.logger.Info("deleting local file", slog.String("path", localPath))
 		if err := os.Remove(localPath); err != nil {
 			if os.IsNotExist(err) {
