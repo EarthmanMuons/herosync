@@ -164,8 +164,8 @@ func (c *Client) GetMediaList(ctx context.Context) (*MediaList, error) {
 
 // Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Media/operation/OGP_DOWNLOAD_MEDIA
 func (c *Client) DownloadMediaFile(ctx context.Context, directory string, filename string, downloadDir string) error {
-	relativePath := fmt.Sprintf("/videos/DCIM/%s/%s", directory, filename)
-	reqURL := c.baseURL.JoinPath(relativePath).String()
+	relPath := fmt.Sprintf("/videos/DCIM/%s/%s", directory, filename)
+	reqURL := c.baseURL.JoinPath(relPath).String()
 
 	resp, err := c.get(ctx, reqURL)
 	if err != nil {
