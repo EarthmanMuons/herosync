@@ -72,7 +72,7 @@ func loadDefaults() error {
 	defaults := map[string]any{
 		"gopro.host":   "", // Empty means use mDNS discovery
 		"gopro.scheme": "http",
-		"group.by":     "media-id",
+		"group.by":     "chapters",
 		"log.level":    "info",
 		"media.dir":    DefaultMediaDir(),
 	}
@@ -119,10 +119,10 @@ func validateConfig(cfg *Config) error {
 	}
 
 	switch cfg.Group.By {
-	case "media-id", "date":
+	case "chapters", "date":
 		// valid
 	default:
-		return fmt.Errorf("invalid group: %q (choose media-id or date)", cfg.Group.By)
+		return fmt.Errorf("invalid grouping: %q (choose chapters or date)", cfg.Group.By)
 	}
 
 	// Try unmarshalling the log level to validate it.

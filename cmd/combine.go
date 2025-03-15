@@ -23,9 +23,17 @@ type combineOptions struct {
 	incomingDir  string
 	outgoingDir  string
 	inventory    *media.Inventory
-	groupBy      string
+	groupBy      GroupBy
 	keepOriginal bool
 }
+
+// GroupBy defines the type for grouping files.
+type GroupBy int
+
+const (
+	GroupByChapters GroupBy = iota
+	GroupByDate
+)
 
 // newCombineCmd constructs the "combine" subcommand.
 func newCombineCmd() *cobra.Command {
@@ -36,7 +44,7 @@ func newCombineCmd() *cobra.Command {
 		RunE:    runCombine,
 	}
 
-	cmd.Flags().String("group-by", "", "group videos by (media-id, date)")
+	cmd.Flags().String("group-by", "", "group videos by (chapters, date)")
 	cmd.Flags().BoolP("keep-original", "k", false, "prevent deleting original files after combining")
 
 	return cmd
@@ -62,7 +70,10 @@ func runCombine(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	groupBy := cfg.Group.By
+	groupBy, err := ParseGroupBy(cfg.Group.By)
+	if err != nil {
+		return err
+	}
 	keepOriginal, _ := cmd.Flags().GetBool("keep-original")
 
 	opts := combineOptions{
@@ -76,19 +87,19 @@ func runCombine(cmd *cobra.Command, args []string) error {
 	}
 
 	switch groupBy {
-	case "media-id":
-		return combineByMediaID(ctx, &opts)
-	case "date":
+	case GroupByChapters:
+		return combineByChapters(ctx, &opts)
+	case GroupByDate:
 		return combineByDate(ctx, &opts)
 	default:
-		return fmt.Errorf("invalid group-by option: %s", groupBy)
+		return fmt.Errorf("invalid grouping: %s", groupBy)
 	}
 }
 
-func combineByMediaID(ctx context.Context, opts *combineOptions) error {
+func combineByChapters(ctx context.Context, opts *combineOptions) error {
 	mediaIDs := opts.inventory.MediaIDs()
 	if len(mediaIDs) == 0 {
-		opts.logger.Debug("no Media IDs found to combine")
+		opts.logger.Debug("no chaptered videos found to combine")
 		return nil
 	}
 
@@ -98,10 +109,10 @@ func combineByMediaID(ctx context.Context, opts *combineOptions) error {
 			return err
 		}
 
-		opts.logger.Debug("combining files", "media-id", mediaID)
+		opts.logger.Debug("combining chaptered files", "media-id", mediaID)
 
 		if err := combineFiles(ctx, filtered, opts); err != nil {
-			return fmt.Errorf("combining by media ID %d: %w", mediaID, err)
+			return fmt.Errorf("combining chapters for media ID %d: %w", mediaID, err)
 		}
 	}
 	return nil
@@ -187,17 +198,17 @@ func buildFFmpegInputList(inv *media.Inventory, mediaDir string) ([]string, erro
 }
 
 // generateOutputPath determines a unique output file path based on the grouping method.
-func generateOutputPath(inv *media.Inventory, groupBy string, mediaDir string) (string, error) {
+func generateOutputPath(inv *media.Inventory, groupBy GroupBy, mediaDir string) (string, error) {
 	var outputFilename string
 
 	switch groupBy {
-	case "media-id":
+	case GroupByChapters:
 		firstFile := gopro.ParseFilename(inv.Files[0].Filename)
 		outputFilename = fmt.Sprintf("gopro-%04d.mp4", firstFile.MediaID)
-	case "date":
+	case GroupByDate:
 		outputFilename = fmt.Sprintf("daily-%s.mp4", inv.Files[0].CreatedAt.Format(time.DateOnly))
 	default:
-		return "", fmt.Errorf("invalid group-by option: %s", groupBy)
+		return "", fmt.Errorf("invalid grouping: %s", groupBy)
 	}
 
 	fullPath := filepath.Join(mediaDir, outputFilename)
@@ -254,4 +265,28 @@ func runFFmpeg(ctx context.Context, inputFileList, outputFilePath string, opts *
 	}
 
 	return nil
+}
+
+// String method for pretty printing.
+func (g GroupBy) String() string {
+	switch g {
+	case GroupByChapters:
+		return "chapters"
+	case GroupByDate:
+		return "date"
+	default:
+		return "unknown"
+	}
+}
+
+// ParseGroupBy converts a string to GroupBy type.
+func ParseGroupBy(input string) (GroupBy, error) {
+	switch strings.ToLower(input) {
+	case "chapters":
+		return GroupByChapters, nil
+	case "date":
+		return GroupByDate, nil
+	default:
+		return -1, fmt.Errorf("invalid GroupBy: %s", input)
+	}
 }
