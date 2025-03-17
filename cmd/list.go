@@ -2,9 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/dustin/go-humanize"
 	"github.com/spf13/cobra"
 
 	"github.com/EarthmanMuons/herosync/internal/gopro"
@@ -35,8 +33,9 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	incomingDir := cfg.IncomingMediaDir()
+	outgoingDir := cfg.OutgoingMediaDir()
 
-	inventory, err := media.NewInventory(ctx, client, incomingDir)
+	inventory, err := media.NewInventory(ctx, client, incomingDir, outgoingDir)
 	if err != nil {
 		return err
 	}
@@ -45,16 +44,9 @@ func runList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	printInventory(inventory)
+	for _, file := range inventory.Files {
+		fmt.Println(file)
+	}
 
 	return nil
-}
-
-// printInventory prints the inventory in a human-readable format.
-func printInventory(inventory *media.Inventory) {
-	for _, file := range inventory.Files {
-		createdAt := file.CreatedAt.Format(time.DateTime)
-		humanSize := humanize.Bytes(uint64(file.Size))
-		fmt.Printf("%s %-15s %s %8s %22s\n", file.Status.Symbol(), file.Filename, createdAt, humanSize, file.Status)
-	}
 }

@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/dustin/go-humanize"
 
 	"github.com/EarthmanMuons/herosync/internal/gopro"
 )
@@ -21,6 +24,7 @@ const (
 	OnlyLocal                // File exists only locally
 	InSync                   // File exists on both, with matching sizes
 	OutOfSync                // File exists on both, but sizes differ
+	Processed                // File is ready for uploading to YouTube
 	StatError                // Represents stat error
 )
 
@@ -32,9 +36,11 @@ func (s Status) String() string {
 	case OnlyLocal:
 		return "only stored on local"
 	case InSync:
-		return "file already in sync"
+		return "saved on all devices"
 	case OutOfSync:
 		return "SIZES ARE MISMATCHED"
+	case Processed:
+		return "ready for publishing"
 	default:
 		return fmt.Sprintf("unknown status (%d)", int(s))
 	}
@@ -51,6 +57,8 @@ func (s Status) Symbol() string {
 		return "="
 	case OutOfSync:
 		return "!"
+	case Processed:
+		return "^"
 	default:
 		return fmt.Sprintf("unknown status (%d)", int(s))
 	}
@@ -58,12 +66,12 @@ func (s Status) Symbol() string {
 
 // File represents a single media file and its synchronization status.
 type File struct {
-	Directory string
-	Filename  string
-	CreatedAt time.Time
-	Size      int64
-	Status    Status
-	Error     error
+	Directory   string
+	Filename    string
+	CreatedAt   time.Time
+	Size        int64
+	Status      Status
+	DisplayInfo string
 }
 
 // Inventory holds the results of comparing remote and local files.
@@ -72,64 +80,27 @@ type Inventory struct {
 }
 
 // NewInventory creates an Inventory by comparing remote and local files.
-func NewInventory(ctx context.Context, client *gopro.Client, dir string) (*Inventory, error) {
-	absDir, err := filepath.Abs(dir)
-	if err != nil {
-		return nil, fmt.Errorf("getting absolute path for directory: %w", err)
-	}
-
+func NewInventory(ctx context.Context, client *gopro.Client, incomingDir, outgoingDir string) (*Inventory, error) {
 	mediaList, err := client.GetMediaList(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	localFiles, err := scanLocalFiles(absDir)
+	incomingFiles, err := scanLocalFiles(incomingDir)
+	if err != nil {
+		return nil, err
+	}
+
+	outgoingFiles, err := scanLocalFiles(outgoingDir)
 	if err != nil {
 		return nil, err
 	}
 
 	inventory := &Inventory{}
+	processRemoteFiles(mediaList, incomingFiles, incomingDir, inventory)
+	processIncomingFiles(incomingFiles, incomingDir, inventory)
+	processOutgoingFiles(outgoingFiles, outgoingDir, inventory)
 
-	// Add files from GoPro.
-	for _, media := range mediaList.Media {
-		for _, file := range media.Items {
-			localFileInfo, localFileExists := localFiles[file.Filename]
-
-			status := OnlyRemote // Default status.
-
-			if localFileExists {
-				if localFileInfo.Size() == file.Size {
-					status = InSync
-				} else {
-					status = OutOfSync
-				}
-			}
-
-			mediaFile := File{
-				Directory: media.Directory,
-				Filename:  file.Filename,
-				CreatedAt: file.CreatedAt,
-				Size:      file.Size,
-				Status:    status,
-			}
-			inventory.Files = append(inventory.Files, mediaFile)
-			delete(localFiles, file.Filename) // Remove from the map.
-		}
-	}
-
-	// Add any remaining local files (files that exist only locally).
-	for localFileName, localFileInfo := range localFiles {
-		mediaFile := File{
-			Directory: absDir, // Assume no subdirectory.
-			Filename:  localFileName,
-			CreatedAt: localFileInfo.ModTime(), // Use mtime from local file.
-			Size:      localFileInfo.Size(),
-			Status:    OnlyLocal,
-		}
-		inventory.Files = append(inventory.Files, mediaFile)
-	}
-
-	// Sort the inventory by file creation time.
 	sort.Slice(inventory.Files, func(i, j int) bool {
 		return inventory.Files[i].CreatedAt.Before(inventory.Files[j].CreatedAt)
 	})
@@ -139,34 +110,120 @@ func NewInventory(ctx context.Context, client *gopro.Client, dir string) (*Inven
 
 // scanLocalFiles builds a map of local files (filename -> os.FileInfo).
 func scanLocalFiles(dir string) (map[string]os.FileInfo, error) {
-	localFiles := make(map[string]os.FileInfo)
-
-	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			if os.IsNotExist(err) {
-				return nil
-			}
-			return err
-		}
-
-		if !d.IsDir() {
-			info, err := d.Info()
-			if err != nil {
-				return err
-			}
-			rel, err := filepath.Rel(dir, path)
-			if err != nil {
-				return fmt.Errorf("finding relative path of, %v, to directory, %v: %w", path, dir, err)
-			}
-			localFiles[rel] = info
-		}
-		return nil
-	})
+	absDir, err := filepath.Abs(dir)
 	if err != nil {
-		return nil, fmt.Errorf("walking local directory %s: %w", dir, err)
+		return nil, fmt.Errorf("getting absolute path for directory: %w", err)
 	}
 
-	return localFiles, nil
+	files := make(map[string]os.FileInfo)
+
+	entries, err := os.ReadDir(absDir)
+	if err != nil {
+		return nil, fmt.Errorf("reading directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		if !entry.Type().IsRegular() {
+			continue
+		}
+
+		filePath := filepath.Join(absDir, entry.Name())
+		info, err := os.Stat(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("stat file: %w", err)
+		}
+
+		files[entry.Name()] = info
+	}
+
+	return files, nil
+}
+
+// processRemoteFiles adds files from GoPro and updates their status if found locally in incoming directory.
+func processRemoteFiles(mediaList *gopro.MediaList, incomingFiles map[string]os.FileInfo, incomingDir string, inventory *Inventory) {
+	for _, media := range mediaList.Media {
+		for _, file := range media.Items {
+			localFileInfo, localFileExists := incomingFiles[file.Filename]
+
+			status := OnlyRemote
+			if localFileExists {
+				if localFileInfo.Size() == file.Size {
+					status = InSync
+				} else {
+					status = OutOfSync
+				}
+				delete(incomingFiles, file.Filename)
+			}
+
+			mediaFile := File{
+				Directory: media.Directory,
+				Filename:  file.Filename,
+				CreatedAt: file.CreatedAt,
+				Size:      file.Size,
+				Status:    status,
+			}
+			mediaFile.DisplayInfo = generateDisplayInfo(mediaFile)
+
+			inventory.Files = append(inventory.Files, mediaFile)
+		}
+	}
+}
+
+// processIncomingFiles handles local files that were not found on the GoPro (incoming media).
+func processIncomingFiles(incomingFiles map[string]os.FileInfo, incomingDir string, inventory *Inventory) {
+	for filename, fileInfo := range incomingFiles {
+		mediaFile := File{
+			Directory: incomingDir,
+			Filename:  filename,
+			CreatedAt: fileInfo.ModTime(),
+			Size:      fileInfo.Size(),
+			Status:    OnlyLocal,
+		}
+		mediaFile.DisplayInfo = generateDisplayInfo(mediaFile)
+
+		inventory.Files = append(inventory.Files, mediaFile)
+	}
+}
+
+// processOutgoingFiles handles local files that are in the outgoing directory (ready for upload).
+func processOutgoingFiles(outgoingFiles map[string]os.FileInfo, outgoingDir string, inventory *Inventory) {
+	for filename, fileInfo := range outgoingFiles {
+		mediaFile := File{
+			Directory: outgoingDir,
+			Filename:  filename,
+			CreatedAt: fileInfo.ModTime(),
+			Size:      fileInfo.Size(),
+			Status:    Processed,
+		}
+		mediaFile.DisplayInfo = generateDisplayInfo(mediaFile)
+
+		inventory.Files = append(inventory.Files, mediaFile)
+	}
+}
+
+// generateDisplayInfo precomputes the file's full display string for easy filtering.
+// func generateDisplayInfo(directory, filename string, createdAt time.Time, size int64, status Status) string {
+func generateDisplayInfo(file File) string {
+	displayDir := file.Directory
+	if file.Status == OnlyRemote {
+		displayDir = " pending"
+	} else if file.Status == InSync {
+		displayDir = "incoming"
+	}
+
+	return fmt.Sprintf("%s  %s %8s  %20s  %s / %s",
+		file.Status.Symbol(),
+		file.Status.String(),
+		humanize.Bytes(uint64(file.Size)),
+		file.CreatedAt.Format(time.DateTime),
+		path.Base(displayDir),
+		file.Filename,
+	)
+}
+
+// String() returns the precomputed display information.
+func (f File) String() string {
+	return f.DisplayInfo
 }
 
 // FilterByDate returns a new Inventory containing only files created on the specified date.

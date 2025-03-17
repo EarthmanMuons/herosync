@@ -67,8 +67,9 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 	}
 
 	incomingDir := cfg.IncomingMediaDir()
+	outgoingDir := cfg.OutgoingMediaDir()
 
-	inventory, err := media.NewInventory(ctx, client, incomingDir)
+	inventory, err := media.NewInventory(ctx, client, incomingDir, outgoingDir)
 	if err != nil {
 		return err
 	}
