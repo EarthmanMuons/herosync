@@ -231,6 +231,11 @@ func (inv *Inventory) FilterByDate(date time.Time) (*Inventory, error) {
 	filtered := &Inventory{}
 
 	for _, file := range inv.Files {
+		// Skip already processed (outgoing) files.
+		if file.Status == Processed {
+			continue
+		}
+
 		// Compare year, month, and day.
 		y1, m1, d1 := file.CreatedAt.Date()
 		y2, m2, d2 := date.Date()
@@ -277,6 +282,11 @@ func (inv *Inventory) FilterByMediaID(mediaID int) (*Inventory, error) {
 	var chapters []File
 
 	for _, file := range inv.Files {
+		// Skip already processed (outgoing) files.
+		if file.Status == Processed {
+			continue
+		}
+
 		fileInfo := gopro.ParseFilename(file.Filename)
 		if fileInfo.IsValid && fileInfo.MediaID == mediaID {
 			chapters = append(chapters, file)
@@ -323,6 +333,11 @@ func (inv *Inventory) MediaIDs() []int {
 	var ids []int
 
 	for _, file := range inv.Files {
+		// Skip already processed (outgoing) files.
+		if file.Status == Processed {
+			continue
+		}
+
 		fileInfo := gopro.ParseFilename(file.Filename)
 		if _, ok := keys[fileInfo.MediaID]; !ok {
 			keys[fileInfo.MediaID] = true
@@ -339,6 +354,11 @@ func (inv *Inventory) UniqueDates() []time.Time {
 	var dates []time.Time
 
 	for _, file := range inv.Files {
+		// Skip already processed (outgoing) files.
+		if file.Status == Processed {
+			continue
+		}
+
 		date := time.Date(file.CreatedAt.Year(), file.CreatedAt.Month(), file.CreatedAt.Day(), 0, 0, 0, 0, file.CreatedAt.Location())
 		if _, ok := dateMap[date]; !ok {
 			dateMap[date] = true
