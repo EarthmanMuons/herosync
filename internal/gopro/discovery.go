@@ -68,13 +68,21 @@ func resolveHost(host string) (string, error) {
 
 // findGoPro discovers a GoPro camera on the local network via mDNS.
 func findGoPro() (net.IP, error) {
-	conn, err := net.ListenMulticastUDP("udp4", nil, &net.UDPAddr{IP: net.ParseIP("224.0.0.251"), Port: 5353})
+	multicastAddr := "224.0.0.251:5353"
+
+	// Use a standard UDP socket for sending.
+	dst, err := net.ResolveUDPAddr("udp4", multicastAddr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create multicast connection: %w", err)
+		return nil, fmt.Errorf("failed to resolve multicast address: %w", err)
+	}
+
+	conn, err := net.ListenPacket("udp4", ":0") // bind to an ephemeral port
+	if err != nil {
+		return nil, fmt.Errorf("failed to open UDP socket: %w", err)
 	}
 	defer conn.Close()
 
-	// Build and send the mDNS query.
+	// Build the mDNS query.
 	msg := new(dns.Msg)
 	msg.SetQuestion("_gopro-web._tcp.local.", dns.TypePTR)
 	msg.RecursionDesired = false
@@ -84,34 +92,58 @@ func findGoPro() (net.IP, error) {
 		return nil, fmt.Errorf("failed to pack message: %w", err)
 	}
 
-	if _, err := conn.WriteToUDP(buf, &net.UDPAddr{IP: net.ParseIP("224.0.0.251"), Port: 5353}); err != nil {
-		return nil, fmt.Errorf("failed to send query: %w", err)
+	// Set up a channel for the response.
+	resultChan := make(chan net.IP, 1)
+	doneChan := make(chan struct{})
+
+	// Listen for responses.
+	go func() {
+		response := make([]byte, 65536)
+		conn.SetReadDeadline(time.Now().Add(6 * time.Second))
+
+		for {
+			n, _, err := conn.ReadFrom(response)
+			if err != nil {
+				close(doneChan)
+				return
+			}
+
+			resp := new(dns.Msg)
+			if err := resp.Unpack(response[:n]); err != nil {
+				continue
+			}
+
+			// Look for A records.
+			for _, answer := range append(resp.Answer, resp.Extra...) {
+				if a, ok := answer.(*dns.A); ok {
+					resultChan <- a.A
+					close(doneChan)
+					return
+				}
+			}
+		}
+	}()
+
+	// Send query and retry up to 3 times, but stop if a response is received.
+	for range 3 {
+		select {
+		case ip := <-resultChan:
+			return ip, nil
+		case <-time.After(500 * time.Millisecond):
+			if _, err := conn.WriteTo(buf, dst); err != nil {
+				return nil, fmt.Errorf("failed to send query: %w", err)
+			}
+		case <-doneChan:
+			break
+		}
 	}
 
-	// Wait for the response.
-	response := make([]byte, 65536)
-	conn.SetReadDeadline(time.Now().Add(4 * time.Second))
-
-	for {
-		n, _, err := conn.ReadFromUDP(response)
-		if err != nil {
-			if e, ok := err.(net.Error); ok && e.Timeout() {
-				return nil, fmt.Errorf("timeout waiting for response")
-			}
-			return nil, fmt.Errorf("error reading response: %w", err)
-		}
-
-		resp := new(dns.Msg)
-		if err := resp.Unpack(response[:n]); err != nil {
-			continue
-		}
-
-		// Return first A record found
-		for _, answer := range append(resp.Answer, resp.Extra...) {
-			if a, ok := answer.(*dns.A); ok {
-				return a.A, nil
-			}
-		}
+	// Final check in case response came in right before timeout.
+	select {
+	case ip := <-resultChan:
+		return ip, nil
+	default:
+		return nil, fmt.Errorf("no response received after retries")
 	}
 }
 
