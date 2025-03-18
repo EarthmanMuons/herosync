@@ -73,7 +73,7 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	inventory, err = inventory.FilterByFilename(args)
+	inventory, err = inventory.FilterByDisplayInfo(args)
 	if err != nil {
 		return err
 	}

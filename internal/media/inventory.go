@@ -251,18 +251,20 @@ func (inv *Inventory) FilterByDate(date time.Time) (*Inventory, error) {
 	return filtered, nil
 }
 
-// FilterByFilename returns a new Inventory containing only files whose
-// filenames match (case-insensitive, partial match) any of the strings in the
-// provided filenames slice.
-func (inv *Inventory) FilterByFilename(filenames []string) (*Inventory, error) {
-	if len(filenames) == 0 {
+// FilterByDisplayInfo returns a new Inventory containing only files whose
+// display info matches (case-insensitive, partial match) any of the strings in
+// the provided keywords slice.
+func (inv *Inventory) FilterByDisplayInfo(keywords []string) (*Inventory, error) {
+	if len(keywords) == 0 {
 		return inv, nil // no filtering needed
 	}
 
 	filtered := &Inventory{}
 	for _, file := range inv.Files {
-		for _, filter := range filenames {
-			if strings.Contains(strings.ToLower(file.Filename), strings.ToLower(filter)) {
+		haystack := strings.ToLower(file.DisplayInfo)
+
+		for _, needle := range keywords {
+			if strings.Contains(haystack, strings.ToLower(needle)) {
 				filtered.Files = append(filtered.Files, file)
 				break // avoid adding the same file multiple times
 			}
@@ -270,7 +272,7 @@ func (inv *Inventory) FilterByFilename(filenames []string) (*Inventory, error) {
 	}
 
 	if len(filtered.Files) == 0 {
-		return nil, fmt.Errorf("no matching files found for filenames: %v", filenames)
+		return nil, fmt.Errorf("no matching files found for: %v", keywords)
 	}
 
 	return filtered, nil
