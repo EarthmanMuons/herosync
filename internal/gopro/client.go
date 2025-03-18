@@ -81,6 +81,31 @@ func (c *Client) get(ctx context.Context, fullURL string) (*http.Response, error
 	return c.httpClient.Do(retryableReq)
 }
 
+// Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Control/operation/OGP_TURBO_MODE_ENABLE
+func (c *Client) ConfigureTurboTransfer(ctx context.Context, enable bool) error {
+	// Convert boolean to the appropriate query parameter (0 for disable, 1 for enable).
+	param := 0
+	if enable {
+		param = 1
+	}
+
+	// Create this manually as a string to prevent URL encoding.
+	fullURL := fmt.Sprintf("%s/gopro/media/turbo_transfer?p=%d", c.baseURL, param)
+
+	resp, err := c.get(ctx, fullURL)
+	if err != nil {
+		return fmt.Errorf("configuring turbo transfer mode: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("configuring turbo transfer mode: unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
 // Upstream API: https://gopro.github.io/OpenGoPro/http#tag/Query/operation/OGP_GET_STATE
 func (c *Client) GetCameraState(ctx context.Context) (*CameraState, error) {
 	reqURL := c.baseURL.JoinPath("/gopro/camera/state").String()

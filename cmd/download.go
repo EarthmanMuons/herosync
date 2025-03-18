@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"github.com/spf13/cobra"
 
@@ -22,6 +25,8 @@ type downloadOptions struct {
 	force        bool
 	keepOriginal bool
 }
+
+var activeDownloads = make(map[string]struct{})
 
 // newDownloadCmd constructs the "download" subcommand.
 func newDownloadCmd() *cobra.Command {
@@ -54,6 +59,9 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Set up interrupt handling.
+	handleInterrupt(client)
+
 	inventory, err := loadFilteredInventory(ctx, cfg, client, args)
 	if err != nil {
 		return err
@@ -78,6 +86,21 @@ func runDownload(cmd *cobra.Command, args []string) error {
 // downloadInventory handles downloading files based on their sync status.
 func downloadInventory(ctx context.Context, opts *downloadOptions) error {
 	var errs []error
+
+	// Enable Turbo Transfer mode for faster download speeds.
+	opts.logger.Info("enabling turbo transfer mode")
+	if err := opts.client.ConfigureTurboTransfer(ctx, true); err != nil {
+		opts.logger.Warn("failed to enable turbo transfer mode", slog.Any("error", err))
+	}
+
+	// Ensure Turbo Transfer mode is turned off after download.
+	defer func() {
+		opts.logger.Info("disabling turbo transfer mode")
+		if err := opts.client.ConfigureTurboTransfer(ctx, false); err != nil {
+			opts.logger.Warn("failed to disable turbo transfer mode", slog.Any("error", err))
+		}
+	}()
+
 	for _, file := range opts.inventory.Files {
 		shouldDownload := shouldDownload(file, opts.force)
 		if !shouldDownload {
@@ -111,6 +134,9 @@ func shouldDownload(file media.File, force bool) bool {
 func downloadAndVerify(ctx context.Context, file *media.File, opts *downloadOptions) error {
 	downloadPath := filepath.Join(opts.incomingDir, file.Filename)
 
+	activeDownloads[downloadPath] = struct{}{}  // track active download
+	defer delete(activeDownloads, downloadPath) // cleanup tracking after completion
+
 	if err := opts.client.DownloadMediaFile(ctx, file.Directory, file.Filename, opts.incomingDir); err != nil {
 		return fmt.Errorf("failed to download file %s: %w", file.Filename, err)
 	}
@@ -137,4 +163,28 @@ func downloadAndVerify(ctx context.Context, file *media.File, opts *downloadOpti
 	}
 
 	return nil
+}
+
+func handleInterrupt(client *gopro.Client) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-sigChan
+		fmt.Println("\nInterrupted! Cleaning up...")
+
+		// Remove any partial downloads.
+		for file := range activeDownloads {
+			fmt.Printf("Removing partial file: %s\n", file)
+			os.Remove(file)
+		}
+
+		// Always disable Turbo Transfer mode on exit.
+		fmt.Println("Disabling Turbo Transfer mode before exiting...")
+		if err := client.ConfigureTurboTransfer(context.Background(), false); err != nil {
+			fmt.Println("Warning: Failed to disable Turbo Transfer mode:", err)
+		}
+
+		os.Exit(1)
+	}()
 }
