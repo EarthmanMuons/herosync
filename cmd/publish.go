@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 	"log/slog"
-	// "path/filepath"
+	"path/filepath"
 
-	// "github.com/adrg/xdg"
+	"github.com/adrg/xdg"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/youtube/v3"
 
@@ -56,8 +56,6 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// TODO: is proper location $XDG_CONFIG/herosync/client_secret.json???
 func defaultClientSecretPath() string {
-	// return filepath.Join(xdg.ConfigHome, "herosync", "client_secret.json")
-	return "client_secret.json"
+	return filepath.Join(xdg.ConfigHome, "herosync", "client_secret.json")
 }

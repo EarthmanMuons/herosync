@@ -10,9 +10,9 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 
@@ -20,10 +20,7 @@ import (
 	"golang.org/x/oauth2/google"
 )
 
-const (
-	redirectURL   = "http://127.0.0.1:8090" // localhost loopback address
-	tokenFilename = "herosync-token.json"
-)
+const redirectURL = "http://127.0.0.1:8090" // localhost loopback address
 
 // GetClient creates an HTTP client using OAuth2 with the given scope.
 // It reads client_secret.json, and if no cached token exists,
@@ -41,7 +38,7 @@ func GetClient(ctx context.Context, file string, scopes []string) *http.Client {
 
 	config.RedirectURL = redirectURL
 
-	cacheFile, err := tokenCacheFile()
+	cacheFile := filepath.Join(path.Dir(file), "token.json")
 	if err != nil {
 		log.Fatalf("Unable to get path to cached credential file: %v", err)
 	}
@@ -114,17 +111,6 @@ func getTokenFromWeb(config *oauth2.Config, authURL string) (*oauth2.Token, erro
 
 	code := <-codeCh
 	return exchangeToken(config, code)
-}
-
-// tokenCacheFile generates the credential file path.
-func tokenCacheFile() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	tokenCacheDir := filepath.Join(homeDir, ".credentials")
-	os.MkdirAll(tokenCacheDir, 0o700)
-	return filepath.Join(tokenCacheDir, url.QueryEscape(tokenFilename)), nil
 }
 
 // tokenFromFile retrieves a Token from a file.
