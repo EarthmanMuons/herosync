@@ -25,7 +25,6 @@ const (
 	InSync                   // File exists on both, with matching sizes
 	OutOfSync                // File exists on both, but sizes differ
 	Processed                // File is ready for uploading to YouTube
-	StatError                // Represents stat error
 )
 
 // String provides a human-readable representation of the Status.
@@ -209,6 +208,8 @@ func generateDisplayInfo(file File) string {
 		displayDir = " pending"
 	} else if file.Status == InSync {
 		displayDir = "incoming"
+	} else if file.Status == OutOfSync {
+		displayDir = "corrupt?"
 	}
 
 	return fmt.Sprintf("%s  %s %8s  %20s  %s / %s",
