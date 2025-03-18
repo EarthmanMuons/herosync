@@ -90,6 +90,11 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 // cleanupInventory loops through the inventory and deletes applicable files.
 func cleanupInventory(ctx context.Context, opts *cleanupOptions) error {
 	for _, file := range opts.inventory.Files {
+		// Skip already processed (outgoing) files.
+		if file.Status == media.Processed {
+			continue
+		}
+
 		if err := cleanupFile(ctx, &file, opts); err != nil {
 			opts.logger.Error("cleanup failed", slog.String("filename", file.Filename), slog.Any("error", err))
 		}
