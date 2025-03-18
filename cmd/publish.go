@@ -7,6 +7,7 @@ import (
 
 	"github.com/adrg/xdg"
 	"github.com/spf13/cobra"
+	"google.golang.org/api/option"
 	"google.golang.org/api/youtube/v3"
 
 	yt "github.com/EarthmanMuons/herosync/internal/youtube"
@@ -31,8 +32,8 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	}
 
 	scopes := []string{
-		"https://www.googleapis.com/auth/youtube.readonly",
-		"https://www.googleapis.com/auth/youtube.upload",
+		youtube.YoutubeReadonlyScope,
+		youtube.YoutubeUploadScope,
 	}
 
 	logger.Info("creating youtube client", slog.Any("scopes", scopes))
@@ -40,7 +41,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	clientFile := defaultClientSecretPath()
 	client := yt.GetClient(ctx, clientFile, scopes)
 
-	svc, err := youtube.New(client)
+	svc, err := youtube.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		return fmt.Errorf("unable to create YouTube service: %v", err)
 	}
