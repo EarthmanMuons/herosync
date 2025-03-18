@@ -17,8 +17,8 @@ import (
 type downloadOptions struct {
 	logger       *slog.Logger
 	client       *gopro.Client
-	incomingDir  string
 	inventory    *media.Inventory
+	incomingDir  string
 	force        bool
 	keepOriginal bool
 }
@@ -54,26 +54,20 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	inventory, err := loadFilteredInventory(ctx, cfg, client, args)
+	if err != nil {
+		return err
+	}
+
 	incomingDir := cfg.IncomingMediaDir()
-	outgoingDir := cfg.OutgoingMediaDir()
-
-	inventory, err := media.NewInventory(ctx, client, incomingDir, outgoingDir)
-	if err != nil {
-		return err
-	}
-	inventory, err = inventory.FilterByDisplayInfo(args)
-	if err != nil {
-		return err
-	}
-
 	force, _ := cmd.Flags().GetBool("force")
 	keepOriginal, _ := cmd.Flags().GetBool("keep-original")
 
 	opts := downloadOptions{
 		logger:       logger,
 		client:       client,
-		incomingDir:  incomingDir,
 		inventory:    inventory,
+		incomingDir:  incomingDir,
 		force:        force,
 		keepOriginal: keepOriginal,
 	}

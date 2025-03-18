@@ -20,9 +20,9 @@ import (
 type combineOptions struct {
 	logger       *slog.Logger
 	client       *gopro.Client
+	inventory    *media.Inventory
 	incomingDir  string
 	outgoingDir  string
-	inventory    *media.Inventory
 	groupBy      GroupBy
 	keepOriginal bool
 }
@@ -41,6 +41,7 @@ func newCombineCmd() *cobra.Command {
 		Use:     "combine",
 		Aliases: []string{"merge"},
 		Short:   "Merge incoming media into outgoing videos",
+		Args:    cobra.ArbitraryArgs,
 		RunE:    runCombine,
 	}
 
@@ -62,14 +63,13 @@ func runCombine(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	incomingDir := cfg.IncomingMediaDir()
-	outgoingDir := cfg.OutgoingMediaDir()
-
-	inventory, err := media.NewInventory(ctx, client, incomingDir, outgoingDir)
+	inventory, err := loadFilteredInventory(ctx, cfg, client, args)
 	if err != nil {
 		return err
 	}
 
+	incomingDir := cfg.IncomingMediaDir()
+	outgoingDir := cfg.OutgoingMediaDir()
 	groupBy, err := ParseGroupBy(cfg.Group.By)
 	if err != nil {
 		return err
@@ -79,9 +79,9 @@ func runCombine(cmd *cobra.Command, args []string) error {
 	opts := combineOptions{
 		logger:       logger,
 		client:       client,
+		inventory:    inventory,
 		incomingDir:  incomingDir,
 		outgoingDir:  outgoingDir,
-		inventory:    inventory,
 		groupBy:      groupBy,
 		keepOriginal: keepOriginal,
 	}

@@ -12,6 +12,8 @@ import (
 
 	"github.com/EarthmanMuons/herosync/config"
 	"github.com/EarthmanMuons/herosync/internal/fsutil"
+	"github.com/EarthmanMuons/herosync/internal/gopro"
+	"github.com/EarthmanMuons/herosync/internal/media"
 )
 
 // NewRootCmd constructs the root command.
@@ -168,4 +170,21 @@ func contextLoggerConfig(cmd *cobra.Command) (context.Context, *slog.Logger, *co
 	}
 
 	return ctx, logger, cfg, nil
+}
+
+func loadFilteredInventory(ctx context.Context, cfg *config.Config, client *gopro.Client, keywords []string) (*media.Inventory, error) {
+	inventory, err := media.NewInventory(ctx, client, cfg.IncomingMediaDir(), cfg.OutgoingMediaDir())
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply filtering only if terms are provided.
+	if len(keywords) > 0 {
+		inventory, err = inventory.FilterByDisplayInfo(keywords)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return inventory, nil
 }

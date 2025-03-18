@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/EarthmanMuons/herosync/internal/gopro"
-	"github.com/EarthmanMuons/herosync/internal/media"
 )
 
 // newListCmd constructs the "list" subcommand.
@@ -32,14 +31,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	incomingDir := cfg.IncomingMediaDir()
-	outgoingDir := cfg.OutgoingMediaDir()
-
-	inventory, err := media.NewInventory(ctx, client, incomingDir, outgoingDir)
-	if err != nil {
-		return err
-	}
-	inventory, err = inventory.FilterByDisplayInfo(args)
+	inventory, err := loadFilteredInventory(ctx, cfg, client, args)
 	if err != nil {
 		return err
 	}

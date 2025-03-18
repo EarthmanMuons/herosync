@@ -16,8 +16,8 @@ import (
 type cleanupOptions struct {
 	logger      *slog.Logger
 	client      *gopro.Client
-	incomingDir string
 	inventory   *media.Inventory
+	incomingDir string
 	remote      bool
 	local       bool
 }
@@ -66,26 +66,20 @@ func runCleanup(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	inventory, err := loadFilteredInventory(ctx, cfg, client, args)
+	if err != nil {
+		return err
+	}
+
 	incomingDir := cfg.IncomingMediaDir()
-	outgoingDir := cfg.OutgoingMediaDir()
-
-	inventory, err := media.NewInventory(ctx, client, incomingDir, outgoingDir)
-	if err != nil {
-		return err
-	}
-	inventory, err = inventory.FilterByDisplayInfo(args)
-	if err != nil {
-		return err
-	}
-
 	remote, _ := cmd.Flags().GetBool("remote")
 	local, _ := cmd.Flags().GetBool("local")
 
 	opts := cleanupOptions{
 		logger:      logger,
 		client:      client,
-		incomingDir: incomingDir,
 		inventory:   inventory,
+		incomingDir: incomingDir,
 		remote:      remote,
 		local:       local,
 	}
