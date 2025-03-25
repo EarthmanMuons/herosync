@@ -88,14 +88,14 @@ func downloadInventory(ctx context.Context, opts *downloadOptions) error {
 	var errs []error
 
 	// Enable Turbo Transfer mode for faster download speeds.
-	opts.logger.Info("enabling turbo transfer mode")
+	opts.logger.Debug("enabling turbo transfer mode")
 	if err := opts.client.ConfigureTurboTransfer(ctx, true); err != nil {
 		opts.logger.Warn("failed to enable turbo transfer mode", slog.Any("error", err))
 	}
 
 	// Ensure Turbo Transfer mode is turned off after download.
 	defer func() {
-		opts.logger.Info("disabling turbo transfer mode")
+		opts.logger.Debug("disabling turbo transfer mode")
 		if err := opts.client.ConfigureTurboTransfer(ctx, false); err != nil {
 			opts.logger.Warn("failed to disable turbo transfer mode", slog.Any("error", err))
 		}

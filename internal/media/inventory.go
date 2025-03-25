@@ -96,9 +96,26 @@ func NewInventory(ctx context.Context, client *gopro.Client, incomingDir, outgoi
 	}
 
 	inventory := &Inventory{}
-	processRemoteFiles(mediaList, incomingFiles, incomingDir, inventory)
+	processRemoteFiles(mediaList, incomingFiles, inventory)
 	processIncomingFiles(incomingFiles, incomingDir, inventory)
 	processOutgoingFiles(outgoingFiles, outgoingDir, inventory)
+
+	sort.Slice(inventory.Files, func(i, j int) bool {
+		return inventory.Files[i].CreatedAt.Before(inventory.Files[j].CreatedAt)
+	})
+
+	return inventory, nil
+}
+
+// NewProcessedInventory creates an Inventory from only the processed outgoing files.
+func NewProcessedInventory(outgoingDir string) (*Inventory, error) {
+	files, err := scanLocalFiles(outgoingDir)
+	if err != nil {
+		return nil, err
+	}
+
+	inventory := &Inventory{}
+	processOutgoingFiles(files, outgoingDir, inventory)
 
 	sort.Slice(inventory.Files, func(i, j int) bool {
 		return inventory.Files[i].CreatedAt.Before(inventory.Files[j].CreatedAt)
@@ -139,7 +156,7 @@ func scanLocalFiles(dir string) (map[string]os.FileInfo, error) {
 }
 
 // processRemoteFiles adds files from GoPro and updates their status if found locally in incoming directory.
-func processRemoteFiles(mediaList *gopro.MediaList, incomingFiles map[string]os.FileInfo, incomingDir string, inventory *Inventory) {
+func processRemoteFiles(mediaList *gopro.MediaList, incomingFiles map[string]os.FileInfo, inventory *Inventory) {
 	for _, media := range mediaList.Media {
 		for _, file := range media.Items {
 			localFileInfo, localFileExists := incomingFiles[file.Filename]
@@ -311,11 +328,22 @@ func (inv *Inventory) FilterByMediaID(mediaID int) (*Inventory, error) {
 	return filtered, nil
 }
 
-// TotalSize returns the sum total size (in bytes) of all of the files in the Inventory.
+// TotalSize calculates the total size (in bytes) of all of the files in the Inventory.
 func (inv *Inventory) TotalSize() int64 {
 	var totalSize int64
 	for _, file := range inv.Files {
 		totalSize += file.Size
+	}
+	return totalSize
+}
+
+// PendingSize calculates the total size (in bytes) of files in the Inventory with the OnlyRemote status.
+func (inv *Inventory) PendingSize() int64 {
+	var totalSize int64
+	for _, file := range inv.Files {
+		if file.Status == OnlyRemote {
+			totalSize += file.Size
+		}
 	}
 	return totalSize
 }
@@ -372,4 +400,25 @@ func (inv *Inventory) UniqueDates() []time.Time {
 		return a.Compare(b)
 	})
 	return dates
+}
+
+// EarliestProcessedDate returns the earliest creation date of a video with the "Processed" status.
+func (inv *Inventory) EarliestProcessedDate() (time.Time, error) {
+	var earliest time.Time
+	first := true
+
+	for _, file := range inv.Files {
+		if file.Status == Processed {
+			if first || file.CreatedAt.Before(earliest) {
+				earliest = file.CreatedAt
+				first = false
+			}
+		}
+	}
+
+	if first {
+		return time.Time{}, fmt.Errorf("no processed videos found")
+	}
+
+	return earliest, nil
 }

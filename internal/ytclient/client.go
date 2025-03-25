@@ -1,4 +1,4 @@
-package youtube
+package ytclient
 
 // https://github.com/googleapis/google-api-go-client
 // https://developers.google.com/youtube/v3/docs
@@ -22,10 +22,10 @@ import (
 
 const redirectURL = "http://127.0.0.1:8090" // localhost loopback address
 
-// GetClient creates an HTTP client using OAuth2 with the given scope.
+// New creates an HTTP client using OAuth2 with the given scopes.
 // It reads client_secret.json, and if no cached token exists,
 // it launches a web server for the OAuth2 flow.
-func GetClient(ctx context.Context, file string, scopes []string) *http.Client {
+func New(ctx context.Context, file string, scopes []string) *http.Client {
 	jsonKey, err := os.ReadFile(file)
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
