@@ -143,6 +143,11 @@ func scanLocalFiles(dir string) (map[string]os.FileInfo, error) {
 			continue
 		}
 
+		ext := strings.ToLower(filepath.Ext(entry.Name()))
+		if ext != ".mp4" {
+			continue
+		}
+
 		filePath := filepath.Join(absDir, entry.Name())
 		info, err := os.Stat(filePath)
 		if err != nil {
