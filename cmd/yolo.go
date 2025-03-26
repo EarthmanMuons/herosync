@@ -1,7 +1,8 @@
 package cmd
 
 import (
-	"os"
+	"fmt"
+	"log/slog"
 
 	"github.com/spf13/cobra"
 )
@@ -19,14 +20,24 @@ func newYOLOCmd() *cobra.Command {
 
 // runYOLO is the entry point for the "yolo" subcommand.
 func runYOLO(cmd *cobra.Command, args []string) error {
-	// ctx, logger, cfg, err := contextLoggerConfig(cmd)
-	_, logger, _, err := contextLoggerConfig(cmd)
-	if err != nil {
-		return err
+	logger := slog.Default()
+
+	commands := []struct {
+		name string
+		fn   func(*cobra.Command, []string) error
+	}{
+		{"download", runDownload},
+		{"combine", runCombine},
+		{"publish", runPublish},
 	}
 
-	logger.Error("UNIMPLEMENTED", "command", cmd.Use)
-	os.Exit(1)
+	for _, c := range commands {
+		logger.Info("YOLO running", slog.String("subcommand", c.name))
+		err := c.fn(cmd, args)
+		if err != nil {
+			return fmt.Errorf("%s subcommand failed: %w", c.name, err)
+		}
+	}
 
 	return nil
 }
