@@ -3,7 +3,10 @@ package cmd
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/adrg/xdg"
@@ -75,39 +78,36 @@ func runPublish(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Channel: %v\n", resp.Items[0].Snippet.Title)
 
-	publishedAfter, err := inventory.EarliestProcessedDate()
-	if err != nil {
-		return err
-	}
+	// publishedAfter, err := inventory.EarliestProcessedDate()
+	// if err != nil {
+	// 	return err
+	// }
 
-	// Check inventory size and decide whether to apply PublishedAfter optimization.
-	inventorySize := len(inventory.Files)
-	logger.Info("checking uploaded videos", slog.Int("inventory_size", inventorySize))
+	// // Check inventory size and decide whether to apply PublishedAfter optimization.
+	// inventorySize := len(inventory.Files)
+	// logger.Info("checking uploaded videos", slog.Int("inventory_size", inventorySize))
 
-	// Fetch uploaded video list
-	uploadedVideos, err := getUploadedVideos(svc, inventorySize, publishedAfter)
-	if err != nil {
-		return err
-	}
+	// // Fetch uploaded video list
+	// uploadedVideos, err := getUploadedVideos(svc, inventorySize, publishedAfter)
+	// if err != nil {
+	// 	return err
+	// }
 
-	// Print uploaded videos for debugging
-	printUploadedVideos(uploadedVideos)
+	// // DEBUG: print uploaded video details
+	// printUploadedVideos(uploadedVideos)
 
-	// Convert list to a map for quick lookup.
-	uploadedFileMap := make(map[string]*youtube.Video)
-	for _, vid := range uploadedVideos {
-		if vid.FileDetails != nil && vid.FileDetails.FileName != "" {
-			fmt.Printf("filename: %q\n", vid.FileDetails.FileName)
-			uploadedFileMap[vid.FileDetails.FileName] = vid
-		}
-	}
+	// // Convert list to a map for quick lookup.
+	// uploadedFileMap := make(map[string]*youtube.Video)
+	// for _, vid := range uploadedVideos {
+	// 	if vid.FileDetails != nil && vid.FileDetails.FileName != "" {
+	//      // DEBUG: upstream bug that no file details are ever returned
+	// 		fmt.Printf("filename: %q\n", vid.FileDetails.FileName)
+	// 		uploadedFileMap[vid.FileDetails.FileName] = vid
+	// 	}
+	// }
 
-	// // Get user-defined templates
-	// titleTemplate, _ := cmd.Flags().GetString("title")
-	// descriptionTemplate, _ := cmd.Flags().GetString("description")
-
-	// // Call the upload function
-	// return uploadVideos(svc, inventory, uploadedFileMap, titleTemplate, descriptionTemplate, logger)
+	// Call the upload function
+	return uploadVideos(svc, inventory, logger)
 
 	return nil
 }
@@ -153,19 +153,19 @@ func getVideoDetails(service *youtube.Service, videoIDs []string) ([]*youtube.Vi
 		return nil, fmt.Errorf("fetching video details: %v", err)
 	}
 
-	// Debugging: Print processing details
-	for _, item := range videoResponse.Items {
-		fmt.Printf("Video ID: %s\n", item.Id)
-		if item.ProcessingDetails != nil {
-			fmt.Printf("  Processing Status: %s\n", item.ProcessingDetails.ProcessingStatus)
-			fmt.Printf("  File Availability: %s\n", item.ProcessingDetails.FileDetailsAvailability)
-			if item.ProcessingDetails.ProcessingFailureReason != "" {
-				fmt.Printf("  Processing Failure Reason: %s\n", item.ProcessingDetails.ProcessingFailureReason)
-			}
-		} else {
-			fmt.Println("  No processing details available")
-		}
-	}
+	// // DEBUG: print processing details
+	// for _, item := range videoResponse.Items {
+	// 	fmt.Printf("Video ID: %s\n", item.Id)
+	// 	if item.ProcessingDetails != nil {
+	// 		fmt.Printf("  Processing Status: %s\n", item.ProcessingDetails.ProcessingStatus)
+	// 		fmt.Printf("  File Availability: %s\n", item.ProcessingDetails.FileDetailsAvailability)
+	// 		if item.ProcessingDetails.ProcessingFailureReason != "" {
+	// 			fmt.Printf("  Processing Failure Reason: %s\n", item.ProcessingDetails.ProcessingFailureReason)
+	// 		}
+	// 	} else {
+	// 		fmt.Println("  No processing details available")
+	// 	}
+	// }
 
 	return videoResponse.Items, nil
 }
@@ -182,45 +182,125 @@ func printUploadedVideos(videos []*youtube.Video) {
 	fmt.Println("--------------------------------")
 }
 
-// func uploadVideos(svc *youtube.Service, inventory *media.Inventory, uploadedFileMap map[string]*youtube.Video, titleTemplate, descriptionTemplate string, logger *slog.Logger) error {
-// 	for _, file := range inventory.Files {
-// 		filename := filepath.Base(file.Path)
+func uploadVideos(service *youtube.Service, inventory *media.Inventory, logger *slog.Logger) error {
+	for _, file := range inventory.Files {
+		// // Skip if already uploaded
+		// if _, exists := uploadedFileMap[file.Filename]; exists {
+		// 	logger.Info("Skipping already uploaded video", slog.String("filename", filename))
+		// 	continue
+		// }
 
-// 		// Skip if already uploaded
-// 		if _, exists := uploadedFileMap[filename]; exists {
-// 			logger.Info("Skipping already uploaded video", slog.String("filename", filename))
-// 			continue
-// 		}
+		filePath := filepath.Join(file.Directory, file.Filename)
 
-// 		// Extract metadata
-// 		metadata := extractMetadata(filename)
+		metadata := extractMetadata(file.Filename)
+		title := generateTitle(metadata)
+		description := "Uploaded via herosync."
+		category := "10"
+		keywords := ""
 
-// 		// Apply title/description templates
-// 		title, err := generateTitle(titleTemplate, metadata)
-// 		if err != nil {
-// 			logger.Error("Error generating title", slog.String("filename", filename), slog.Any("error", err))
-// 			continue
-// 		}
-// 		description, _ := generateTitle(descriptionTemplate, metadata)
+		logger.Info("uploading video", slog.String("filename", file.Filename), slog.String("title", title))
 
-// 		logger.Info("Uploading video", slog.String("filename", filename), slog.String("title", title))
+		upload := &youtube.Video{
+			Snippet: &youtube.VideoSnippet{
+				Title:       title,
+				Description: description,
+				CategoryId:  category,
+			},
+			Status: &youtube.VideoStatus{PrivacyStatus: "private"},
+		}
 
-// 		video := &youtube.Video{
-// 			Snippet: &youtube.VideoSnippet{
-// 				Title:       title,
-// 				Description: description,
-// 			},
-// 			Status: &youtube.VideoStatus{PrivacyStatus: "private"},
-// 		}
+		// The API returns a 400 Bad Request response if tags is an empty string.
+		if strings.Trim(keywords, "") != "" {
+			upload.Snippet.Tags = strings.Split(keywords, ",")
+		}
 
-// 		uploadCall := svc.Videos.Insert([]string{"snippet", "status"}, video, nil)
-// 		_, err = uploadCall.Do()
-// 		if err != nil {
-// 			logger.Error("Error uploading video", slog.String("filename", filename), slog.Any("error", err))
-// 			continue
-// 		}
+		// TODO: set these:
+		// recordingDetails.recordingDate
+		// status.containsSyntheticMedia
 
-// 		logger.Info("Video uploaded successfully", slog.String("title", title))
-// 	}
-// 	return nil
-// }
+		call := service.Videos.Insert([]string{"snippet", "status"}, upload)
+
+		video, err := os.Open(filePath)
+		defer video.Close()
+		if err != nil {
+			logger.Error("opening file", slog.String("filename", file.Filename))
+			continue
+		}
+
+		resp, err := call.Media(video).Do()
+		if err != nil {
+			logger.Error("uploading video", slog.String("filename", file.Filename), slog.Any("error", err))
+			continue
+		}
+
+		logger.Info("video uploaded successfully", slog.String("title", title), slog.String("response-id", resp.Id))
+	}
+
+	return nil
+}
+
+// extractMetadata parses the filename to extract metadata, including media ID or date
+func extractMetadata(filename string) map[string]string {
+	metadata := map[string]string{}
+	baseFilename := strings.TrimSuffix(filename, filepath.Ext(filename))
+
+	// Match counter suffix if present (e.g., "_1", "_2").
+	counterRe := regexp.MustCompile(`_(\d+)$`)
+	counterMatch := counterRe.FindStringSubmatch(baseFilename)
+	counter := ""
+	if len(counterMatch) > 1 {
+		counter = counterMatch[1]
+		// Strip the counter from the base filename
+		baseFilename = strings.TrimSuffix(baseFilename, "_"+counter)
+	}
+	metadata["counter"] = counter
+
+	// Match GoPro media ID filenames: gopro-<MEDIA-ID>
+	mediaRe := regexp.MustCompile(`^gopro-0*(\d+)$`)
+	mediaMatch := mediaRe.FindStringSubmatch(baseFilename)
+	if len(mediaMatch) > 1 {
+		metadata["type"] = "chapters"
+		metadata["media_id"] = mediaMatch[1]
+		return metadata
+	}
+
+	// Match date-based filenames: daily-YYYY-MM-DD
+	dateRe := regexp.MustCompile(`^daily-(\d{4}-\d{2}-\d{2})$`)
+	dateMatch := dateRe.FindStringSubmatch(baseFilename)
+	if len(dateMatch) > 1 {
+		metadata["type"] = "date"
+		metadata["date"] = dateMatch[1]
+		return metadata
+	}
+
+	// Fallback: use the whole base filename as a generic identifier.
+	metadata["type"] = "unknown"
+	metadata["identifier"] = baseFilename
+
+	return metadata
+}
+
+// generateTitle generates a title based on extracted metadata
+func generateTitle(metadata map[string]string) string {
+	var title string
+
+	switch metadata["type"] {
+	case "chapters":
+		title = fmt.Sprintf("Media ID: %s", metadata["media_id"])
+		if metadata["counter"] != "" {
+			title += fmt.Sprintf(" (Part %s)", metadata["counter"])
+		}
+	case "date":
+		title = fmt.Sprintf("%s", metadata["date"])
+		if metadata["counter"] != "" {
+			title += fmt.Sprintf(" (Part %s)", metadata["counter"])
+		}
+	default:
+		title = metadata["identifier"]
+		if metadata["counter"] != "" {
+			title += fmt.Sprintf(" (Part %s)", metadata["counter"])
+		}
+	}
+
+	return title
+}
