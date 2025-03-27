@@ -14,6 +14,7 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/api/youtube/v3"
 
+	"github.com/EarthmanMuons/herosync/config"
 	"github.com/EarthmanMuons/herosync/internal/media"
 	"github.com/EarthmanMuons/herosync/internal/ytclient"
 )
@@ -58,7 +59,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		youtube.YoutubeUploadScope,
 	}
 
-	logger.Info("creating youtube client", slog.Any("scopes", scopes))
+	logger.Debug("creating youtube client", slog.Any("scopes", scopes))
 
 	clientFile := defaultClientSecretPath()
 	client := ytclient.New(ctx, clientFile, scopes)
@@ -100,7 +101,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	return uploadVideos(service, inventory, uploadedFileMap, logger)
+	return uploadVideos(cfg, service, inventory, uploadedFileMap, logger)
 }
 
 func defaultClientSecretPath() string {
@@ -142,7 +143,7 @@ func getVideoDetails(service *youtube.Service, videoIDs []string) ([]*youtube.Vi
 	return videoResponse.Items, nil
 }
 
-func uploadVideos(service *youtube.Service, inventory *media.Inventory, uploadedFileMap map[string]map[uint64]struct{}, logger *slog.Logger) error {
+func uploadVideos(cfg *config.Config, service *youtube.Service, inventory *media.Inventory, uploadedFileMap map[string]map[uint64]struct{}, logger *slog.Logger) error {
 	for _, file := range inventory.Files {
 		key := formatRecordingDate(file.CreatedAt)
 
@@ -159,12 +160,11 @@ func uploadVideos(service *youtube.Service, inventory *media.Inventory, uploaded
 		uploadedFileMap[key][file.Duration] = struct{}{}
 
 		// Proceed with the upload...
-		filePath := filepath.Join(file.Directory, file.Filename)
-		metadata := extractMetadata(file.Filename)
-		title := generateTitle(metadata)
-		description := "Uploaded via herosync."
-		category := "10" // Music
-		keywords := "piano,practice"
+		title := generateTitle(cfg, file.Filename)
+		description := cfg.Video.Description
+		tags := cfg.Video.Tags
+		category := cfg.Video.CategoryID
+		privacyStatus := cfg.Video.PrivacyStatus
 
 		logger.Info("uploading video", slog.String("filename", file.Filename), slog.String("title", title))
 
@@ -179,17 +179,18 @@ func uploadVideos(service *youtube.Service, inventory *media.Inventory, uploaded
 			},
 			Status: &youtube.VideoStatus{
 				ContainsSyntheticMedia: false, // TODO: this doesn't seem to work
-				PrivacyStatus:          "private",
+				PrivacyStatus:          privacyStatus,
 			},
 		}
 
 		// The API returns a 400 Bad Request response if tags is an empty string.
-		if strings.Trim(keywords, "") != "" {
-			upload.Snippet.Tags = strings.Split(keywords, ",")
+		if strings.Trim(tags, "") != "" {
+			upload.Snippet.Tags = strings.Split(tags, ",")
 		}
 
 		call := service.Videos.Insert([]string{"recordingDetails", "snippet", "status"}, upload)
 
+		filePath := filepath.Join(file.Directory, file.Filename)
 		video, err := os.Open(filePath)
 		defer video.Close()
 		if err != nil {
@@ -245,21 +246,31 @@ func withinTolerance(a, b uint64) bool {
 	return b-a <= durationTolerance
 }
 
+func generateTitle(cfg *config.Config, filename string) string {
+	metadata := extractMetadata(filename)
+	template := cfg.Video.Title
+	title := template
+
+	for key, value := range metadata {
+		placeholder := fmt.Sprintf("${%s}", key)
+		title = strings.ReplaceAll(title, placeholder, value)
+	}
+
+	return strings.TrimSpace(title)
+}
+
 // extractMetadata parses the filename to extract metadata, including media ID or date
 func extractMetadata(filename string) map[string]string {
-	metadata := map[string]string{}
+	metadata := map[string]string{"counter": ""}
 	baseFilename := strings.TrimSuffix(filename, filepath.Ext(filename))
 
 	// Match counter suffix if present (e.g., "_1", "_2").
 	counterRe := regexp.MustCompile(`_(\d+)$`)
 	counterMatch := counterRe.FindStringSubmatch(baseFilename)
-	counter := ""
 	if len(counterMatch) > 1 {
-		counter = counterMatch[1]
-		// Strip the counter from the base filename
-		baseFilename = strings.TrimSuffix(baseFilename, "_"+counter)
+		metadata["counter"] = counterMatch[1]
+		baseFilename = strings.TrimSuffix(baseFilename, "_"+counterMatch[1])
 	}
-	metadata["counter"] = counter
 
 	// Match GoPro media ID filenames: gopro-<MEDIA-ID>
 	mediaRe := regexp.MustCompile(`^gopro-0*(\d+)$`)
@@ -267,6 +278,7 @@ func extractMetadata(filename string) map[string]string {
 	if len(mediaMatch) > 1 {
 		metadata["type"] = "chapters"
 		metadata["media_id"] = mediaMatch[1]
+		metadata["identifier"] = mediaMatch[1]
 		return metadata
 	}
 
@@ -276,6 +288,7 @@ func extractMetadata(filename string) map[string]string {
 	if len(dateMatch) > 1 {
 		metadata["type"] = "date"
 		metadata["date"] = dateMatch[1]
+		metadata["identifier"] = dateMatch[1]
 		return metadata
 	}
 
@@ -284,29 +297,4 @@ func extractMetadata(filename string) map[string]string {
 	metadata["identifier"] = baseFilename
 
 	return metadata
-}
-
-// generateTitle generates a title based on extracted metadata
-func generateTitle(metadata map[string]string) string {
-	var title string
-
-	switch metadata["type"] {
-	case "chapters":
-		title = fmt.Sprintf("Media ID: %s", metadata["media_id"])
-		if metadata["counter"] != "" {
-			title += fmt.Sprintf(" (Part %s)", metadata["counter"])
-		}
-	case "date":
-		title = fmt.Sprintf("%s", metadata["date"])
-		if metadata["counter"] != "" {
-			title += fmt.Sprintf(" (Part %s)", metadata["counter"])
-		}
-	default:
-		title = metadata["identifier"]
-		if metadata["counter"] != "" {
-			title += fmt.Sprintf(" (Part %s)", metadata["counter"])
-		}
-	}
-
-	return title
 }

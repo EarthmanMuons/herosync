@@ -32,6 +32,13 @@ type Config struct {
 	Media struct {
 		Dir string `koanf:"dir"`
 	} `koanf:"media"`
+	Video struct {
+		Title         string `koanf:"title"`
+		Description   string `koanf:"description"`
+		Tags          string `koanf:"tags"`
+		CategoryID    string `koanf:"category-id"`
+		PrivacyStatus string `koanf:"privacy-status"`
+	} `koanf:"video"`
 }
 
 // DefaultConfigPath returns the default config file path following XDG specification.
@@ -70,11 +77,16 @@ func Init(configFile string, flags map[string]any) error {
 
 func loadDefaults() error {
 	defaults := map[string]any{
-		"gopro.host":   "", // Empty means use mDNS discovery
-		"gopro.scheme": "http",
-		"group.by":     "chapters",
-		"log.level":    "info",
-		"media.dir":    DefaultMediaDir(),
+		"gopro.host":           "", // Empty means use mDNS discovery
+		"gopro.scheme":         "http",
+		"group.by":             "chapters",
+		"log.level":            "info",
+		"media.dir":            DefaultMediaDir(),
+		"video.title":          "GoPro ${identifier} ${counter}",
+		"video.description":    "Uploaded via herosync.",
+		"video.tags":           "",
+		"video.category-id":    "22",
+		"video.privacy-status": "private",
 	}
 	return k.Load(confmap.Provider(defaults, "."), nil)
 }
