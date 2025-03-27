@@ -18,19 +18,17 @@ import (
 	"github.com/EarthmanMuons/herosync/internal/ytclient"
 )
 
+const durationTolerance = 100 // milliseconds
+
 // newPublishCmd constructs the "publish" subcommand.
 func newPublishCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "publish",
-		Aliases: []string{"pub"},
+		Aliases: []string{"pub", "upload"},
 		Short:   "Upload outgoing videos to YouTube",
 		Args:    cobra.ArbitraryArgs,
 		RunE:    runPublish,
 	}
-
-	cmd.Flags().StringP("title", "t", "", "template for video title")
-	cmd.Flags().StringP("description", "d", "", "template for video description")
-
 	return cmd
 }
 
@@ -65,12 +63,12 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	clientFile := defaultClientSecretPath()
 	client := ytclient.New(ctx, clientFile, scopes)
 
-	svc, err := youtube.NewService(ctx, option.WithHTTPClient(client))
+	service, err := youtube.NewService(ctx, option.WithHTTPClient(client))
 	if err != nil {
 		return fmt.Errorf("unable to create YouTube service: %v", err)
 	}
 
-	call := svc.Channels.List([]string{"snippet"}).Mine(true)
+	call := service.Channels.List([]string{"snippet"}).Mine(true)
 	resp, err := call.Do()
 	if err != nil {
 		return fmt.Errorf("making API call: %v", err)
@@ -78,56 +76,44 @@ func runPublish(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Channel: %v\n", resp.Items[0].Snippet.Title)
 
-	// publishedAfter, err := inventory.EarliestProcessedDate()
-	// if err != nil {
-	// 	return err
-	// }
+	// Fetch uploaded video list.
+	uploadedVideos, err := getUploadedVideos(service)
+	if err != nil {
+		return err
+	}
 
-	// // Check inventory size and decide whether to apply PublishedAfter optimization.
-	// inventorySize := len(inventory.Files)
-	// logger.Info("checking uploaded videos", slog.Int("inventory_size", inventorySize))
+	// Map of recording date to a set of durations (to handle multiple uploads on the same day).
+	uploadedFileMap := make(map[string]map[uint64]struct{})
 
-	// // Fetch uploaded video list
-	// uploadedVideos, err := getUploadedVideos(svc, inventorySize, publishedAfter)
-	// if err != nil {
-	// 	return err
-	// }
+	for _, video := range uploadedVideos {
+		if video.RecordingDetails != nil && video.RecordingDetails.RecordingDate != "" {
+			key := video.RecordingDetails.RecordingDate
+			duration := video.FileDetails.DurationMs
 
-	// // DEBUG: print uploaded video details
-	// printUploadedVideos(uploadedVideos)
+			// Initialize the inner map if it doesn't exist.
+			if _, exists := uploadedFileMap[key]; !exists {
+				uploadedFileMap[key] = make(map[uint64]struct{})
+			}
 
-	// // Convert list to a map for quick lookup.
-	// uploadedFileMap := make(map[string]*youtube.Video)
-	// for _, vid := range uploadedVideos {
-	// 	if vid.FileDetails != nil && vid.FileDetails.FileName != "" {
-	//      // DEBUG: upstream bug that no file details are ever returned
-	// 		fmt.Printf("filename: %q\n", vid.FileDetails.FileName)
-	// 		uploadedFileMap[vid.FileDetails.FileName] = vid
-	// 	}
-	// }
+			// Store the duration in the set for this date.
+			uploadedFileMap[key][duration] = struct{}{}
+		}
+	}
 
-	// Call the upload function
-	return uploadVideos(svc, inventory, logger)
-
-	return nil
+	return uploadVideos(service, inventory, uploadedFileMap, logger)
 }
 
 func defaultClientSecretPath() string {
 	return filepath.Join(xdg.ConfigHome, "herosync", "client_secret.json")
 }
 
-func getUploadedVideos(service *youtube.Service, inventorySize int, after time.Time) ([]*youtube.Video, error) {
+func getUploadedVideos(service *youtube.Service) ([]*youtube.Video, error) {
 	// Search for the most recently published videos.
 	call := service.Search.List([]string{"snippet"}).
 		ForMine(true).
 		Type("video").
 		Order("date").
 		MaxResults(50)
-
-	// // Apply PublishedAfter as an optimization if the local inventory is small.
-	// if inventorySize <= 50 {
-	// 	call = call.PublishedAfter(after.Format(time.RFC3339))
-	// }
 
 	resp, err := call.Do()
 	if err != nil {
@@ -147,66 +133,64 @@ func getVideoDetails(service *youtube.Service, videoIDs []string) ([]*youtube.Vi
 		return nil, nil
 	}
 
-	call := service.Videos.List([]string{"snippet", "fileDetails", "processingDetails"}).Id(videoIDs...)
+	call := service.Videos.List([]string{"fileDetails", "recordingDetails", "snippet"}).Id(videoIDs...)
 	videoResponse, err := call.Do()
 	if err != nil {
 		return nil, fmt.Errorf("fetching video details: %v", err)
 	}
 
-	// // DEBUG: print processing details
-	// for _, item := range videoResponse.Items {
-	// 	fmt.Printf("Video ID: %s\n", item.Id)
-	// 	if item.ProcessingDetails != nil {
-	// 		fmt.Printf("  Processing Status: %s\n", item.ProcessingDetails.ProcessingStatus)
-	// 		fmt.Printf("  File Availability: %s\n", item.ProcessingDetails.FileDetailsAvailability)
-	// 		if item.ProcessingDetails.ProcessingFailureReason != "" {
-	// 			fmt.Printf("  Processing Failure Reason: %s\n", item.ProcessingDetails.ProcessingFailureReason)
-	// 		}
-	// 	} else {
-	// 		fmt.Println("  No processing details available")
-	// 	}
-	// }
-
 	return videoResponse.Items, nil
 }
 
-func printUploadedVideos(videos []*youtube.Video) {
-	fmt.Println("Uploaded Videos:")
-	for _, vid := range videos {
-		fmt.Printf("ID: %s\nTitle: %s\nFilename: %s\nDate: %v\n\n",
-			vid.Id,
-			vid.Snippet.Title,
-			vid.FileDetails.FileName,
-			vid.Snippet.PublishedAt)
-	}
-	fmt.Println("--------------------------------")
-}
-
-func uploadVideos(service *youtube.Service, inventory *media.Inventory, logger *slog.Logger) error {
+func uploadVideos(service *youtube.Service, inventory *media.Inventory, uploadedFileMap map[string]map[uint64]struct{}, logger *slog.Logger) error {
 	for _, file := range inventory.Files {
-		// // Skip if already uploaded
-		// if _, exists := uploadedFileMap[file.Filename]; exists {
-		// 	logger.Info("Skipping already uploaded video", slog.String("filename", filename))
-		// 	continue
-		// }
+		// Skip if already uploaded.
+		key := formatRecordingDate(file.CreatedAt)
+
+		// Initialize the inner map if it doesn't exist.
+		if _, exists := uploadedFileMap[key]; !exists {
+			uploadedFileMap[key] = make(map[uint64]struct{})
+		}
+
+		// Check if any stored duration for the date is within tolerance.
+		alreadyUploaded := false
+		for uploadedDuration := range uploadedFileMap[key] {
+			if withinTolerance(uploadedDuration, file.Duration) {
+				logger.Info("skipping already uploaded video", slog.String("filename", file.Filename))
+				alreadyUploaded = true
+				break
+			}
+		}
+
+		if alreadyUploaded {
+			continue
+		}
+
+		// If not found, add the current duration to the map for this date.
+		uploadedFileMap[key][file.Duration] = struct{}{}
 
 		filePath := filepath.Join(file.Directory, file.Filename)
-
 		metadata := extractMetadata(file.Filename)
 		title := generateTitle(metadata)
 		description := "Uploaded via herosync."
-		category := "10"
-		keywords := ""
+		category := "10" // Music
+		keywords := "piano,practice"
 
 		logger.Info("uploading video", slog.String("filename", file.Filename), slog.String("title", title))
 
 		upload := &youtube.Video{
+			RecordingDetails: &youtube.VideoRecordingDetails{
+				RecordingDate: file.CreatedAt.Format(time.RFC3339),
+			},
 			Snippet: &youtube.VideoSnippet{
 				Title:       title,
 				Description: description,
 				CategoryId:  category,
 			},
-			Status: &youtube.VideoStatus{PrivacyStatus: "private"},
+			Status: &youtube.VideoStatus{
+				ContainsSyntheticMedia: false, // TODO: this doesn't seem to work
+				PrivacyStatus:          "private",
+			},
 		}
 
 		// The API returns a 400 Bad Request response if tags is an empty string.
@@ -214,29 +198,38 @@ func uploadVideos(service *youtube.Service, inventory *media.Inventory, logger *
 			upload.Snippet.Tags = strings.Split(keywords, ",")
 		}
 
-		// TODO: set these:
-		// recordingDetails.recordingDate
-		// status.containsSyntheticMedia
-
-		call := service.Videos.Insert([]string{"snippet", "status"}, upload)
+		call := service.Videos.Insert([]string{"recordingDetails", "snippet", "status"}, upload)
 
 		video, err := os.Open(filePath)
 		defer video.Close()
 		if err != nil {
-			logger.Error("opening file", slog.String("filename", file.Filename))
+			logger.Error("opening video", slog.String("filename", file.Filename))
 			continue
 		}
 
-		resp, err := call.Media(video).Do()
+		resp, err := call.Media(video).AutoLevels(true).Do()
 		if err != nil {
 			logger.Error("uploading video", slog.String("filename", file.Filename), slog.Any("error", err))
 			continue
 		}
 
-		logger.Info("video uploaded successfully", slog.String("title", title), slog.String("response-id", resp.Id))
+		logger.Info("video uploaded successfully", slog.String("title", title), slog.String("video-id", resp.Id))
 	}
 
 	return nil
+}
+
+// formatRecordingDate returns a formatted date string truncated to midnight (UTC).
+func formatRecordingDate(t time.Time) string {
+	truncated := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	return truncated.Format(time.RFC3339)
+}
+
+func withinTolerance(a, b uint64) bool {
+	if a > b {
+		return a-b <= durationTolerance
+	}
+	return b-a <= durationTolerance
 }
 
 // extractMetadata parses the filename to extract metadata, including media ID or date

@@ -86,6 +86,29 @@ These steps were adapted from the upstream
 [Go Quickstart](https://developers.google.com/youtube/v3/quickstart/go)
 documentation.
 
+### YouTube Category IDs
+
+Every video requires a _Category ID_, which by default is `"22"` for **People &
+Blogs**. Here are the assignable ID's for reference:
+
+| Category              | ID  |
+| --------------------- | --- |
+| Autos & Vehicles      | 2   |
+| Comedy                | 23  |
+| Education             | 27  |
+| Entertainment         | 24  |
+| Film & Animation      | 1   |
+| Gaming                | 20  |
+| Howto & Style         | 26  |
+| Music                 | 10  |
+| News & Politics       | 25  |
+| Nonprofits & Activism | 29  |
+| People & Blogs        | 22  |
+| Pets & Animals        | 15  |
+| Science & Technology  | 28  |
+| Sports                | 17  |
+| Travel & Events       | 19  |
+
 ## Caveats
 
 `herosync` was designed specifically for my niche use case and will likely **not

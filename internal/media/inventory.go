@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,6 +71,7 @@ type File struct {
 	Filename    string
 	CreatedAt   time.Time
 	Size        int64
+	Duration    uint64
 	Status      Status
 	DisplayInfo string
 }
@@ -209,17 +212,43 @@ func processIncomingFiles(incomingFiles map[string]os.FileInfo, incomingDir stri
 // processOutgoingFiles handles local files that are in the outgoing directory (ready for upload).
 func processOutgoingFiles(outgoingFiles map[string]os.FileInfo, outgoingDir string, inventory *Inventory) {
 	for filename, fileInfo := range outgoingFiles {
+		filePath := filepath.Join(outgoingDir, filename)
+		duration, err := getVideoDuration(filePath)
+		if err != nil {
+			fmt.Printf("Failed to get duration for %s: %v\n", filename, err)
+			continue
+		}
+
 		mediaFile := File{
 			Directory: outgoingDir,
 			Filename:  filename,
 			CreatedAt: fileInfo.ModTime(),
 			Size:      fileInfo.Size(),
+			Duration:  duration,
 			Status:    Processed,
 		}
 		mediaFile.DisplayInfo = generateDisplayInfo(mediaFile)
 
 		inventory.Files = append(inventory.Files, mediaFile)
 	}
+}
+
+// getVideoDuration returns the duration of the video in milliseconds using ffprobe.
+func getVideoDuration(path string) (uint64, error) {
+	cmd := exec.Command("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path)
+	output, err := cmd.Output()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get video duration: %w", err)
+	}
+
+	durationStr := strings.TrimSpace(string(output))
+	duration, err := strconv.ParseFloat(durationStr, 64)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse duration: %w", err)
+	}
+
+	// Convert seconds to milliseconds.
+	return uint64(duration * 1000), nil
 }
 
 // generateDisplayInfo precomputes the file's full display string for easy filtering.
