@@ -144,31 +144,21 @@ func getVideoDetails(service *youtube.Service, videoIDs []string) ([]*youtube.Vi
 
 func uploadVideos(service *youtube.Service, inventory *media.Inventory, uploadedFileMap map[string]map[uint64]struct{}, logger *slog.Logger) error {
 	for _, file := range inventory.Files {
-		// Skip if already uploaded.
 		key := formatRecordingDate(file.CreatedAt)
 
-		// Initialize the inner map if it doesn't exist.
-		if _, exists := uploadedFileMap[key]; !exists {
-			uploadedFileMap[key] = make(map[uint64]struct{})
-		}
-
-		// Check if any stored duration for the date is within tolerance.
-		alreadyUploaded := false
-		for uploadedDuration := range uploadedFileMap[key] {
-			if withinTolerance(uploadedDuration, file.Duration) {
-				logger.Info("skipping already uploaded video", slog.String("filename", file.Filename))
-				alreadyUploaded = true
-				break
-			}
-		}
-
-		if alreadyUploaded {
+		shouldUpload := shouldUpload(key, file.Duration, uploadedFileMap)
+		if !shouldUpload {
+			logger.Info("skipping already uploaded video", slog.String("filename", file.Filename))
 			continue
 		}
 
 		// If not found, add the current duration to the map for this date.
+		if _, exists := uploadedFileMap[key]; !exists {
+			uploadedFileMap[key] = make(map[uint64]struct{})
+		}
 		uploadedFileMap[key][file.Duration] = struct{}{}
 
+		// Proceed with the upload...
 		filePath := filepath.Join(file.Directory, file.Filename)
 		metadata := extractMetadata(file.Filename)
 		title := generateTitle(metadata)
@@ -223,6 +213,19 @@ func uploadVideos(service *youtube.Service, inventory *media.Inventory, uploaded
 func formatRecordingDate(t time.Time) string {
 	truncated := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 	return truncated.Format(time.RFC3339)
+}
+
+// shouldUpload determines whether the video should be uploaded based on uploaded files and duration tolerance.
+func shouldUpload(key string, duration uint64, uploadedFileMap map[string]map[uint64]struct{}) bool {
+	// Check if any stored duration for the date is within tolerance.
+	if durations, exists := uploadedFileMap[key]; exists {
+		for uploadedDuration := range durations {
+			if withinTolerance(uploadedDuration, duration) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func withinTolerance(a, b uint64) bool {
