@@ -308,7 +308,7 @@ func (pw *progressWriter) Read(p []byte) (int, error) {
 	if now.Sub(pw.lastUpdate) >= pw.interval {
 		if pw.totalSize > 0 {
 			percent := float64(pw.written) / float64(pw.totalSize) * 100
-			pw.logger.Info("download progress", "filename", pw.fileName, "progress", fmt.Sprintf("%.2f%%", percent), "written", pw.written, "total", pw.totalSize)
+			pw.logger.Info("download progress", "filename", pw.fileName, "written", pw.written, "total", pw.totalSize, "progress", fmt.Sprintf("%.2f%%", percent))
 		} else {
 			pw.logger.Info("download progress", "filename", pw.fileName, "written", pw.written)
 		}

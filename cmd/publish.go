@@ -197,7 +197,17 @@ func uploadVideos(service *youtube.Service, inventory *media.Inventory, uploaded
 			continue
 		}
 
-		resp, err := call.Media(video).AutoLevels(true).Do()
+		resp, err := call.Media(video).
+			ProgressUpdater(func(current, _ int64) {
+				total := file.Size
+				progress := float64(current) / float64(total) * 100
+				logger.Info("upload progress",
+					slog.String("filename", file.Filename),
+					slog.Int64("written", current),
+					slog.Int64("total", total),
+					slog.String("progress", fmt.Sprintf("%.2f%%", progress)),
+				)
+			}).Do()
 		if err != nil {
 			logger.Error("uploading video", slog.String("filename", file.Filename), slog.Any("error", err))
 			continue
