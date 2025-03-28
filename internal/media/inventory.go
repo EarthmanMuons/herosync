@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -101,7 +100,7 @@ func NewInventory(ctx context.Context, client *gopro.Client, incomingDir, outgoi
 	inventory := &Inventory{}
 	processRemoteFiles(mediaList, incomingFiles, inventory)
 	processIncomingFiles(incomingFiles, incomingDir, inventory)
-	processOutgoingFiles(outgoingFiles, outgoingDir, inventory)
+	processOutgoingFiles(ctx, outgoingFiles, outgoingDir, inventory)
 
 	sort.Slice(inventory.Files, func(i, j int) bool {
 		return inventory.Files[i].CreatedAt.Before(inventory.Files[j].CreatedAt)
@@ -111,14 +110,14 @@ func NewInventory(ctx context.Context, client *gopro.Client, incomingDir, outgoi
 }
 
 // NewProcessedInventory creates an Inventory from only the processed outgoing files.
-func NewProcessedInventory(outgoingDir string) (*Inventory, error) {
+func NewProcessedInventory(ctx context.Context, outgoingDir string) (*Inventory, error) {
 	files, err := scanLocalFiles(outgoingDir)
 	if err != nil {
 		return nil, err
 	}
 
 	inventory := &Inventory{}
-	processOutgoingFiles(files, outgoingDir, inventory)
+	processOutgoingFiles(ctx, files, outgoingDir, inventory)
 
 	sort.Slice(inventory.Files, func(i, j int) bool {
 		return inventory.Files[i].CreatedAt.Before(inventory.Files[j].CreatedAt)
@@ -210,10 +209,10 @@ func processIncomingFiles(incomingFiles map[string]os.FileInfo, incomingDir stri
 }
 
 // processOutgoingFiles handles local files that are in the outgoing directory (ready for upload).
-func processOutgoingFiles(outgoingFiles map[string]os.FileInfo, outgoingDir string, inventory *Inventory) {
+func processOutgoingFiles(ctx context.Context, outgoingFiles map[string]os.FileInfo, outgoingDir string, inventory *Inventory) {
 	for filename, fileInfo := range outgoingFiles {
 		filePath := filepath.Join(outgoingDir, filename)
-		duration, err := getVideoDuration(filePath)
+		duration, err := getVideoDuration(ctx, filePath)
 		if err != nil {
 			fmt.Printf("Failed to get duration for %s: %v\n", filename, err)
 			continue
@@ -234,8 +233,18 @@ func processOutgoingFiles(outgoingFiles map[string]os.FileInfo, outgoingDir stri
 }
 
 // getVideoDuration returns the duration of the video in milliseconds using ffprobe.
-func getVideoDuration(path string) (uint64, error) {
-	cmd := exec.Command("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", path)
+func getVideoDuration(ctx context.Context, path string) (uint64, error) {
+	cmd := exec.CommandContext(
+		ctx,
+		"ffprobe",
+		"-v",
+		"error",
+		"-show_entries",
+		"format=duration",
+		"-of",
+		"default=noprint_wrappers=1:nokey=1",
+		path,
+	)
 	output, err := cmd.Output()
 	if err != nil {
 		return 0, fmt.Errorf("failed to get video duration: %w", err)
@@ -268,7 +277,7 @@ func generateDisplayInfo(file File) string {
 		file.Status.String(),
 		humanize.Bytes(uint64(file.Size)),
 		file.CreatedAt.Format(time.DateTime),
-		path.Base(displayDir),
+		filepath.Base(displayDir),
 		file.Filename,
 	)
 }

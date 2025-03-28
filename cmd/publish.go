@@ -55,7 +55,7 @@ func runPublish(cmd *cobra.Command, args []string) error {
 	}
 
 	// Only look at local processed files that are ready to upload.
-	inventory, err := media.NewProcessedInventory(cfg.OutgoingMediaDir())
+	inventory, err := media.NewProcessedInventory(ctx, cfg.OutgoingMediaDir())
 	if err != nil {
 		return err
 	}
