@@ -19,7 +19,21 @@ import (
 	"github.com/EarthmanMuons/herosync/internal/ytclient"
 )
 
-const durationTolerance = 100 // milliseconds
+type publishOptions struct {
+	logger            *slog.Logger
+	cfg               *config.Config
+	inventory         *media.Inventory
+	service           *youtube.Service
+	uploadedDurations map[string]map[uint64]struct{}
+}
+
+var (
+	counterRe = regexp.MustCompile(`_(\d+)$`)
+	mediaRe   = regexp.MustCompile(`^gopro-0*(\d+)$`)
+	dateRe    = regexp.MustCompile(`^daily-(\d{4}-\d{2}-\d{2})$`)
+)
+
+const durationTolerance = 100 // max milliseconds difference to consider videos identical
 
 // newPublishCmd constructs the "publish" subcommand.
 func newPublishCmd() *cobra.Command {
@@ -75,16 +89,15 @@ func runPublish(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("making API call: %v", err)
 	}
 
-	fmt.Printf("Channel: %v\n", resp.Items[0].Snippet.Title)
+	logger.Debug("connected to youtube", slog.String("channel", resp.Items[0].Snippet.Title))
 
-	// Fetch uploaded video list.
 	uploadedVideos, err := getUploadedVideos(service)
 	if err != nil {
 		return err
 	}
 
 	// Map of recording date to a set of durations (to handle multiple uploads on the same day).
-	uploadedFileMap := make(map[string]map[uint64]struct{})
+	uploadedDurations := make(map[string]map[uint64]struct{})
 
 	for _, video := range uploadedVideos {
 		if video.RecordingDetails != nil && video.RecordingDetails.RecordingDate != "" {
@@ -92,16 +105,24 @@ func runPublish(cmd *cobra.Command, args []string) error {
 			duration := video.FileDetails.DurationMs
 
 			// Initialize the inner map if it doesn't exist.
-			if _, exists := uploadedFileMap[key]; !exists {
-				uploadedFileMap[key] = make(map[uint64]struct{})
+			if _, exists := uploadedDurations[key]; !exists {
+				uploadedDurations[key] = make(map[uint64]struct{})
 			}
 
 			// Store the duration in the set for this date.
-			uploadedFileMap[key][duration] = struct{}{}
+			uploadedDurations[key][duration] = struct{}{}
 		}
 	}
 
-	return uploadVideos(cfg, service, inventory, uploadedFileMap, logger)
+	opts := &publishOptions{
+		logger:            logger,
+		cfg:               cfg,
+		inventory:         inventory,
+		service:           service,
+		uploadedDurations: uploadedDurations,
+	}
+
+	return uploadVideos(opts)
 }
 
 func defaultClientSecretPath() string {
@@ -109,7 +130,6 @@ func defaultClientSecretPath() string {
 }
 
 func getUploadedVideos(service *youtube.Service) ([]*youtube.Video, error) {
-	// Search for the most recently published videos.
 	call := service.Search.List([]string{"snippet"}).
 		ForMine(true).
 		Type("video").
@@ -143,81 +163,81 @@ func getVideoDetails(service *youtube.Service, videoIDs []string) ([]*youtube.Vi
 	return videoResponse.Items, nil
 }
 
-func uploadVideos(cfg *config.Config, service *youtube.Service, inventory *media.Inventory, uploadedFileMap map[string]map[uint64]struct{}, logger *slog.Logger) error {
-	for _, file := range inventory.Files {
+func uploadVideos(opts *publishOptions) error {
+	for _, file := range opts.inventory.Files {
 		key := formatRecordingDate(file.CreatedAt)
 
-		shouldUpload := shouldUpload(key, file.Duration, uploadedFileMap)
-		if !shouldUpload {
-			logger.Info("skipping already uploaded video", slog.String("filename", file.Filename))
+		if !shouldUpload(key, file.Duration, opts.uploadedDurations) {
+			opts.logger.Info("skipping already uploaded video", slog.String("filename", file.Filename))
 			continue
 		}
 
-		// If not found, add the current duration to the map for this date.
-		if _, exists := uploadedFileMap[key]; !exists {
-			uploadedFileMap[key] = make(map[uint64]struct{})
+		// Update the durations map for this date.
+		if _, exists := opts.uploadedDurations[key]; !exists {
+			opts.uploadedDurations[key] = make(map[uint64]struct{})
 		}
-		uploadedFileMap[key][file.Duration] = struct{}{}
+		opts.uploadedDurations[key][file.Duration] = struct{}{}
 
-		// Proceed with the upload...
-		title := generateTitle(cfg, file.Filename)
-		description := cfg.Video.Description
-		tags := cfg.Video.Tags
-		category := cfg.Video.CategoryID
-		privacyStatus := cfg.Video.PrivacyStatus
+		title := generateTitle(opts.cfg, file.Filename)
+		opts.logger.Info("uploading video", slog.String("filename", file.Filename), slog.String("title", title))
 
-		logger.Info("uploading video", slog.String("filename", file.Filename), slog.String("title", title))
-
-		upload := &youtube.Video{
-			RecordingDetails: &youtube.VideoRecordingDetails{
-				RecordingDate: file.CreatedAt.Format(time.RFC3339),
-			},
-			Snippet: &youtube.VideoSnippet{
-				Title:       title,
-				Description: description,
-				CategoryId:  category,
-			},
-			Status: &youtube.VideoStatus{
-				ContainsSyntheticMedia: false, // TODO: this doesn't seem to work
-				PrivacyStatus:          privacyStatus,
-			},
-		}
-
-		// The API returns a 400 Bad Request response if tags is an empty string.
-		if strings.Trim(tags, "") != "" {
-			upload.Snippet.Tags = strings.Split(tags, ",")
-		}
-
-		call := service.Videos.Insert([]string{"recordingDetails", "snippet", "status"}, upload)
-
-		filePath := filepath.Join(file.Directory, file.Filename)
-		video, err := os.Open(filePath)
-		defer video.Close()
+		// Open video file.
+		videoPath := filepath.Join(file.Directory, file.Filename)
+		videoFile, err := os.Open(videoPath)
 		if err != nil {
-			logger.Error("opening video", slog.String("filename", file.Filename))
+			opts.logger.Error("opening video", slog.String("filename", file.Filename))
 			continue
 		}
+		defer videoFile.Close()
 
-		resp, err := call.Media(video).
-			ProgressUpdater(func(current, _ int64) {
-				total := file.Size
-				progress := float64(current) / float64(total) * 100
-				logger.Info("upload progress",
-					slog.String("filename", file.Filename),
-					slog.Int64("written", current),
-					slog.Int64("total", total),
-					slog.String("progress", fmt.Sprintf("%.2f%%", progress)),
-				)
-			}).Do()
+		videoID, err := processUpload(file, title, videoFile, opts)
 		if err != nil {
-			logger.Error("uploading video", slog.String("filename", file.Filename), slog.Any("error", err))
+			opts.logger.Error("uploading video", slog.String("filename", file.Filename), slog.Any("error", err))
 			continue
 		}
 
-		logger.Info("video uploaded successfully", slog.String("title", title), slog.String("video-id", resp.Id))
+		opts.logger.Info("video uploaded successfully", slog.String("title", title), slog.String("video-id", videoID))
+	}
+	return nil
+}
+
+// processUpload handles the actual API call for a single video upload.
+func processUpload(file media.File, title string, videoFile *os.File, opts *publishOptions) (string, error) {
+	upload := &youtube.Video{
+		RecordingDetails: &youtube.VideoRecordingDetails{
+			RecordingDate: file.CreatedAt.Format(time.RFC3339),
+		},
+		Snippet: &youtube.VideoSnippet{
+			Title:       title,
+			Description: opts.cfg.Video.Description,
+			CategoryId:  opts.cfg.Video.CategoryID,
+		},
+		Status: &youtube.VideoStatus{
+			PrivacyStatus: opts.cfg.Video.PrivacyStatus,
+		},
 	}
 
-	return nil
+	// The API returns a 400 Bad Request response if tags is an empty string.
+	if trimmedTags := strings.TrimSpace(opts.cfg.Video.Tags); trimmedTags != "" {
+		upload.Snippet.Tags = strings.Split(trimmedTags, ",")
+	}
+
+	call := opts.service.Videos.Insert([]string{"recordingDetails", "snippet", "status"}, upload)
+	resp, err := call.Media(videoFile).
+		ProgressUpdater(func(current, _ int64) {
+			total := file.Size
+			progress := float64(current) / float64(total) * 100
+			opts.logger.Info("upload progress",
+				slog.String("filename", file.Filename),
+				slog.Int64("written", current),
+				slog.Int64("total", total),
+				slog.String("progress", fmt.Sprintf("%.2f%%", progress)),
+			)
+		}).Do()
+	if err != nil {
+		return "", err
+	}
+	return resp.Id, nil
 }
 
 // formatRecordingDate returns a formatted date string truncated to midnight (UTC).
@@ -227,9 +247,8 @@ func formatRecordingDate(t time.Time) string {
 }
 
 // shouldUpload determines whether the video should be uploaded based on uploaded files and duration tolerance.
-func shouldUpload(key string, duration uint64, uploadedFileMap map[string]map[uint64]struct{}) bool {
-	// Check if any stored duration for the date is within tolerance.
-	if durations, exists := uploadedFileMap[key]; exists {
+func shouldUpload(key string, duration uint64, uploadedDurations map[string]map[uint64]struct{}) bool {
+	if durations, exists := uploadedDurations[key]; exists {
 		for uploadedDuration := range durations {
 			if withinTolerance(uploadedDuration, duration) {
 				return false
@@ -248,8 +267,7 @@ func withinTolerance(a, b uint64) bool {
 
 func generateTitle(cfg *config.Config, filename string) string {
 	metadata := extractMetadata(filename)
-	template := cfg.Video.Title
-	title := template
+	title := cfg.Video.Title
 
 	for key, value := range metadata {
 		placeholder := fmt.Sprintf("${%s}", key)
@@ -265,7 +283,6 @@ func extractMetadata(filename string) map[string]string {
 	baseFilename := strings.TrimSuffix(filename, filepath.Ext(filename))
 
 	// Match counter suffix if present (e.g., "_1", "_2").
-	counterRe := regexp.MustCompile(`_(\d+)$`)
 	counterMatch := counterRe.FindStringSubmatch(baseFilename)
 	if len(counterMatch) > 1 {
 		metadata["counter"] = counterMatch[1]
@@ -273,7 +290,6 @@ func extractMetadata(filename string) map[string]string {
 	}
 
 	// Match GoPro media ID filenames: gopro-<MEDIA-ID>
-	mediaRe := regexp.MustCompile(`^gopro-0*(\d+)$`)
 	mediaMatch := mediaRe.FindStringSubmatch(baseFilename)
 	if len(mediaMatch) > 1 {
 		metadata["type"] = "chapters"
@@ -283,7 +299,6 @@ func extractMetadata(filename string) map[string]string {
 	}
 
 	// Match date-based filenames: daily-YYYY-MM-DD
-	dateRe := regexp.MustCompile(`^daily-(\d{4}-\d{2}-\d{2})$`)
 	dateMatch := dateRe.FindStringSubmatch(baseFilename)
 	if len(dateMatch) > 1 {
 		metadata["type"] = "date"
