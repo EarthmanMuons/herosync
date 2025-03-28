@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Unique identifier for the launch agent's "service-name". -->
+    <key>Label</key>
+    <string>com.earthmanmuons.herosync</string>
+
+    <!--
+    NOTE: launchd does not perform variable interpolation or tilde expansion.
+          ALWAYS USE ABSOLUTE PATHS!
+    -->
+
+    <!--
+    Environment Variables
+    Ensure that the PATH includes directories for herosync, ffmpeg, and ffprobe.
+    -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+     <!-- Command and arguments to run. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>herosync</string>
+        <string>yolo</string>
+        <string>--log-level</string>
+        <string>debug</string>
+    </array>
+
+    <!--
+    Log Files
+    IMPORTANT: Replace 'CHANGEME' with your actual home directory path.
+    -->
+    <key>StandardOutPath</key>
+    <string>/Users/CHANGEME/Library/Logs/herosync.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/CHANGEME/Library/Logs/herosync.log</string>
+
+    <!--
+    Schedule
+    This job is set to run every day at 23:00 (11 PM). Adjust as needed.
+    -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>23</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+</dict>
+</plist>
