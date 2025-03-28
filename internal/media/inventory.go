@@ -100,7 +100,9 @@ func NewInventory(ctx context.Context, client *gopro.Client, incomingDir, outgoi
 	inventory := &Inventory{}
 	processRemoteFiles(mediaList, incomingFiles, inventory)
 	processIncomingFiles(incomingFiles, incomingDir, inventory)
-	processOutgoingFiles(ctx, outgoingFiles, outgoingDir, inventory)
+	if err := processOutgoingFiles(ctx, outgoingFiles, outgoingDir, inventory); err != nil {
+		return nil, err
+	}
 
 	sort.Slice(inventory.Files, func(i, j int) bool {
 		return inventory.Files[i].CreatedAt.Before(inventory.Files[j].CreatedAt)
@@ -117,7 +119,9 @@ func NewProcessedInventory(ctx context.Context, outgoingDir string) (*Inventory,
 	}
 
 	inventory := &Inventory{}
-	processOutgoingFiles(ctx, files, outgoingDir, inventory)
+	if err := processOutgoingFiles(ctx, files, outgoingDir, inventory); err != nil {
+		return nil, err
+	}
 
 	sort.Slice(inventory.Files, func(i, j int) bool {
 		return inventory.Files[i].CreatedAt.Before(inventory.Files[j].CreatedAt)
@@ -209,13 +213,12 @@ func processIncomingFiles(incomingFiles map[string]os.FileInfo, incomingDir stri
 }
 
 // processOutgoingFiles handles local files that are in the outgoing directory (ready for upload).
-func processOutgoingFiles(ctx context.Context, outgoingFiles map[string]os.FileInfo, outgoingDir string, inventory *Inventory) {
+func processOutgoingFiles(ctx context.Context, outgoingFiles map[string]os.FileInfo, outgoingDir string, inventory *Inventory) error {
 	for filename, fileInfo := range outgoingFiles {
 		filePath := filepath.Join(outgoingDir, filename)
 		duration, err := getVideoDuration(ctx, filePath)
 		if err != nil {
-			fmt.Printf("Failed to get duration for %s: %v\n", filename, err)
-			continue
+			return fmt.Errorf("failed to get duration for %s: %w", filename, err)
 		}
 
 		mediaFile := File{
@@ -230,6 +233,7 @@ func processOutgoingFiles(ctx context.Context, outgoingFiles map[string]os.FileI
 
 		inventory.Files = append(inventory.Files, mediaFile)
 	}
+	return nil
 }
 
 // getVideoDuration returns the duration of the video in milliseconds using ffprobe.
