@@ -55,7 +55,7 @@ Use "herosync [command] --help" for more information about a command.
 
 ### YouTube Authorization Credentials
 
-In order to access YouTube programatically for publishing, you'll need to turn
+In order to access YouTube programmatically for publishing, you'll need to turn
 on the _YouTube Data API_ for your Google account:
 
 1. Use [this wizard](https://console.developers.google.com/start/api?id=youtube)
