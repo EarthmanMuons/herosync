@@ -13,7 +13,7 @@
 
     <!--
     Environment Variables
-    Ensure that the PATH includes directories for herosync, ffmpeg, and ffprobe.
+    Ensure that the PATH includes directories for ffmpeg, and ffprobe.
     -->
     <key>EnvironmentVariables</key>
     <dict>
@@ -24,7 +24,7 @@
      <!-- Command and arguments to run. -->
     <key>ProgramArguments</key>
     <array>
-        <string>herosync</string>
+        <string>/absolute/path/to/herosync</string>
         <string>yolo</string>
         <string>--log-level</string>
         <string>debug</string>

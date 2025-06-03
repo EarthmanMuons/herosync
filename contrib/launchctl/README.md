@@ -17,9 +17,12 @@ Edit the `com.earthmanmuons.herosync.plist` file to match your environment
 before saving it. Update the following fields:
 
 1. **Environment Variables:** Ensure that the `PATH` includes directories for
-   `herosync`, `ffmpeg`, and `ffprobe`.
+   `ffmpeg`, and `ffprobe`.
 
-2. **Log File Paths:** Replace `CHANGEME` with your actual home directory path
+2. **Program Arguments:** Ensure that the first argument is the absolute path to
+   your `herosync` executable.
+
+3. **Log File Paths:** Replace `CHANGEME` with your actual home directory path
    in the `StandardOutPath` and `StandardErrorPath` keys.
 
 Save the modified file to the `~/Library/LaunchAgents/` directory.
